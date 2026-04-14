@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.database/
+.env
+*.local
+.vinxi/
+.output/
+analyze.html
+rust/diplomacy-wasm/pkg/
+rust/diplomacy-wasm/target/

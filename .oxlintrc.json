@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react"],
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "rules": {
+    "no-unused-vars": "error",
+    "prefer-const": "error",
+    "no-var": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "typescript/prefer-as-const": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/prefer-namespace-keyword": "error",
+    "typescript/no-explicit-any": "off"
+  },
+  "ignorePatterns": ["src/routeTree.gen.ts", "node_modules"]
+}
