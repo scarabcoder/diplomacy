@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch';
 import classicMapAssetUrl from '@/domain/game/assets-classic-map.svg?url';
@@ -11,7 +12,10 @@ import type {
   UnitType,
 } from '@/domain/game/engine/types.ts';
 import { getBaseProvince, getCoast } from '@/domain/game/lib/province-refs.ts';
-import { useClassicMap } from '@/domain/game/hooks/use-classic-map.ts';
+import {
+  useClassicMap,
+  type ClassicMapData,
+} from '@/domain/game/hooks/use-classic-map.ts';
 import { Territory } from './Territory.tsx';
 import { UnitMarker } from './UnitMarker.tsx';
 
@@ -37,6 +41,7 @@ interface DiplomacyMapProps {
   }>;
   hiddenUnitProvinces?: string[];
   interactionLocked?: boolean;
+  renderOverlay?: (mapData: ClassicMapData) => ReactNode;
   onProvinceClick?: (provinceId: string) => void;
   onUnitClick?: (provinceId: string) => void;
 }
@@ -268,6 +273,7 @@ export function DiplomacyMap({
   overlayUnits = [],
   hiddenUnitProvinces = [],
   interactionLocked = false,
+  renderOverlay,
   onProvinceClick,
   onUnitClick,
 }: DiplomacyMapProps) {
@@ -541,6 +547,8 @@ export function DiplomacyMap({
                     );
                   })}
                 </g>
+
+                {renderOverlay?.(mapData)}
 
                 {hoveredId &&
                   (() => {

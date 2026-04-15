@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, RotateCcw, Trophy } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
 import {
   Card,
@@ -16,52 +16,15 @@ import type {
   PhaseResultItem,
   PhaseResultStatus,
 } from '@/domain/game/phase-results.ts';
-import {
-  useClassicMap,
-  type ClassicMapData,
-} from '@/domain/game/hooks/use-classic-map.ts';
 import { getBaseProvince } from '@/domain/game/lib/province-refs.ts';
 import { PowerName } from '@/domain/game/power-presentation.tsx';
 import { DiplomacyMap } from './DiplomacyMap.tsx';
 import { UnitMarker } from './UnitMarker.tsx';
 
-const REPLAY_CAMERA_MOVE_DURATION_MS = 1000;
-const REPLAY_ACTION_ANIMATION_DURATION_MS = 1000;
-const REPLAY_ACTION_HOLD_DURATION_MS = 1500;
-const REPLAY_RESET_DURATION_MS = 1000;
-const REPLAY_MAX_CAMERA_SCALE = 3.2;
-const REPLAY_MIN_CAMERA_SCALE = 1.85;
-const REPLAY_FOCUS_PADDING_PX = 90;
-const REPLAY_MIN_FOCUS_WIDTH_PX = 180;
-const REPLAY_MIN_FOCUS_HEIGHT_PX = 140;
-
-type ReplayCameraFrame = {
-  scale: number;
-  translateX: number;
-  translateY: number;
-};
-
-type ReplayViewport = {
-  width: number;
-  height: number;
-};
-
-type ReplayActionStep = {
-  annotation: PhaseResultAnnotation;
-  movingUnit: {
-    id: string;
-    from: string;
-    to: string;
-    power: NonNullable<PhaseResultAnnotation['power']>;
-    unitType: NonNullable<PhaseResultAnnotation['unitType']>;
-  } | null;
-};
-
-const DEFAULT_CAMERA_FRAME: ReplayCameraFrame = {
-  scale: 1,
-  translateX: 0,
-  translateY: 0,
-};
+const LOOP_MOVE_MS = 3000;
+const LOOP_FADE_MS = 500;
+const LOOP_PAUSE_MS = 500;
+const LOOP_TOTAL_MS = LOOP_MOVE_MS + LOOP_FADE_MS + LOOP_PAUSE_MS;
 
 function statusClasses(status: PhaseResultStatus): string {
   if (status === 'success') {
@@ -115,103 +78,6 @@ function easeInOut(progress: number): number {
   return 0.5 - Math.cos(Math.PI * progress) / 2;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function interpolateNumber(from: number, to: number, progress: number): number {
-  return from + (to - from) * progress;
-}
-
-function interpolateCameraFrame(
-  from: ReplayCameraFrame,
-  to: ReplayCameraFrame,
-  progress: number,
-): ReplayCameraFrame {
-  return {
-    scale: interpolateNumber(from.scale, to.scale, progress),
-    translateX: interpolateNumber(from.translateX, to.translateX, progress),
-    translateY: interpolateNumber(from.translateY, to.translateY, progress),
-  };
-}
-
-function getAnnotationFocusPoints(
-  annotation: PhaseResultAnnotation,
-  centers: ClassicMapData['centers'],
-) {
-  return [annotation.from, annotation.to, annotation.aux]
-    .filter((value): value is string => Boolean(value))
-    .map(
-      (provinceRef) =>
-        centers[provinceRef] ?? centers[getBaseProvince(provinceRef)],
-    )
-    .filter((center): center is { x: number; y: number } => Boolean(center));
-}
-
-function getCameraFrameForAnnotation(
-  annotation: PhaseResultAnnotation,
-  mapData: ClassicMapData | null,
-  viewport: ReplayViewport,
-): ReplayCameraFrame {
-  if (!mapData || viewport.width <= 0 || viewport.height <= 0) {
-    return DEFAULT_CAMERA_FRAME;
-  }
-
-  const points = getAnnotationFocusPoints(annotation, mapData.centers);
-  if (points.length === 0) {
-    return DEFAULT_CAMERA_FRAME;
-  }
-
-  const fitScale = Math.min(
-    viewport.width / mapData.width,
-    viewport.height / mapData.height,
-  );
-  const renderedWidth = mapData.width * fitScale;
-  const renderedHeight = mapData.height * fitScale;
-  const offsetX = (viewport.width - renderedWidth) / 2;
-  const offsetY = (viewport.height - renderedHeight) / 2;
-
-  const screenPoints = points.map((point) => ({
-    x: offsetX + point.x * fitScale,
-    y: offsetY + point.y * fitScale,
-  }));
-  const xs = screenPoints.map((point) => point.x);
-  const ys = screenPoints.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const boxWidth = Math.max(maxX - minX, REPLAY_MIN_FOCUS_WIDTH_PX);
-  const boxHeight = Math.max(maxY - minY, REPLAY_MIN_FOCUS_HEIGHT_PX);
-  const targetScale = clamp(
-    Math.min(
-      viewport.width / (boxWidth + REPLAY_FOCUS_PADDING_PX * 2),
-      viewport.height / (boxHeight + REPLAY_FOCUS_PADDING_PX * 2),
-    ),
-    REPLAY_MIN_CAMERA_SCALE,
-    REPLAY_MAX_CAMERA_SCALE,
-  );
-
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const unclampedTranslateX = viewport.width / 2 - centerX * targetScale;
-  const unclampedTranslateY = viewport.height / 2 - centerY * targetScale;
-
-  return {
-    scale: targetScale,
-    translateX: clamp(
-      unclampedTranslateX,
-      viewport.width * (1 - targetScale),
-      0,
-    ),
-    translateY: clamp(
-      unclampedTranslateY,
-      viewport.height * (1 - targetScale),
-      0,
-    ),
-  };
-}
-
 export function GamePhaseResultsScreen({
   roomName,
   roomCode,
@@ -228,46 +94,35 @@ export function GamePhaseResultsScreen({
   const acknowledgeMutation = useMutation(
     orpcUtils.game.acknowledgePhaseResult.mutationOptions(),
   );
-  const mapData = useClassicMap();
-  const mapViewportRef = useRef<HTMLDivElement | null>(null);
-  const [replayCount, setReplayCount] = useState(0);
-  const [replayElapsedMs, setReplayElapsedMs] = useState(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [mapViewport, setMapViewport] = useState<ReplayViewport>({
-    width: 0,
-    height: 0,
-  });
+  const [loopElapsedMs, setLoopElapsedMs] = useState(0);
 
-  const actionSteps = useMemo<ReplayActionStep[]>(
+  const movingUnits = useMemo(
     () =>
       payload.annotations
-        .filter((annotation) => annotation.kind !== 'hold')
-        .map((annotation) => ({
-          annotation,
-          movingUnit:
+        .filter(
+          (annotation): annotation is PhaseResultAnnotation & {
+            to: string;
+            power: NonNullable<PhaseResultAnnotation['power']>;
+            unitType: NonNullable<PhaseResultAnnotation['unitType']>;
+          } =>
             (annotation.kind === 'move' || annotation.kind === 'retreat') &&
-            annotation.to &&
-            annotation.power &&
-            annotation.unitType &&
-            annotation.tone === 'success'
-              ? {
-                  id: annotation.id,
-                  from: annotation.from,
-                  to: annotation.to,
-                  power: annotation.power,
-                  unitType: annotation.unitType,
-                }
-              : null,
+            annotation.tone === 'success' &&
+            Boolean(annotation.to) &&
+            Boolean(annotation.power) &&
+            Boolean(annotation.unitType),
+        )
+        .map((annotation) => ({
+          id: annotation.id,
+          from: annotation.from,
+          to: annotation.to,
+          power: annotation.power,
+          unitType: annotation.unitType,
         })),
     [payload.annotations],
   );
-  const replayStepDurationMs =
-    REPLAY_CAMERA_MOVE_DURATION_MS +
-    REPLAY_ACTION_ANIMATION_DURATION_MS +
-    REPLAY_ACTION_HOLD_DURATION_MS;
-  const replayActionDurationMs = actionSteps.length * replayStepDurationMs;
-  const totalReplayDurationMs =
-    replayActionDurationMs + REPLAY_RESET_DURATION_MS;
+
+  const hasAnimation = !prefersReducedMotion && movingUnits.length > 0;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -288,38 +143,9 @@ export function GamePhaseResultsScreen({
   }, []);
 
   useEffect(() => {
-    const element = mapViewportRef.current;
-    if (!element || typeof ResizeObserver === 'undefined') {
-      return;
-    }
+    setLoopElapsedMs(0);
 
-    const updateViewport = () => {
-      const nextViewport = {
-        width: element.clientWidth,
-        height: element.clientHeight,
-      };
-
-      setMapViewport((current) =>
-        current.width === nextViewport.width &&
-        current.height === nextViewport.height
-          ? current
-          : nextViewport,
-      );
-    };
-
-    updateViewport();
-    const observer = new ResizeObserver(updateViewport);
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    setReplayElapsedMs(0);
-
-    if (prefersReducedMotion || actionSteps.length === 0) {
+    if (!hasAnimation) {
       return;
     }
 
@@ -327,11 +153,8 @@ export function GamePhaseResultsScreen({
     const startedAt = performance.now();
 
     const tick = (now: number) => {
-      const elapsed = Math.min(now - startedAt, totalReplayDurationMs);
-      setReplayElapsedMs(elapsed);
-      if (elapsed < totalReplayDurationMs) {
-        animationFrame = requestAnimationFrame(tick);
-      }
+      setLoopElapsedMs((now - startedAt) % LOOP_TOTAL_MS);
+      animationFrame = requestAnimationFrame(tick);
     };
 
     animationFrame = requestAnimationFrame(tick);
@@ -339,104 +162,31 @@ export function GamePhaseResultsScreen({
     return () => {
       cancelAnimationFrame(animationFrame);
     };
-  }, [
-    actionSteps.length,
-    phaseResultId,
-    prefersReducedMotion,
-    replayCount,
-    totalReplayDurationMs,
-  ]);
+  }, [hasAnimation, phaseResultId]);
 
-  const cameraFrames = useMemo(
-    () =>
-      actionSteps.map((step) =>
-        getCameraFrameForAnnotation(step.annotation, mapData, mapViewport),
-      ),
-    [actionSteps, mapData, mapViewport],
-  );
-  const hasAnimatedReplay = !prefersReducedMotion && actionSteps.length > 0;
-  const isReplaying =
-    hasAnimatedReplay && replayElapsedMs < replayActionDurationMs;
-  const isResetting =
-    hasAnimatedReplay &&
-    replayElapsedMs >= replayActionDurationMs &&
-    replayElapsedMs < totalReplayDurationMs;
-  const resolvedBoardProgress = hasAnimatedReplay
-    ? isResetting
-      ? easeInOut(
-          (replayElapsedMs - replayActionDurationMs) / REPLAY_RESET_DURATION_MS,
-        )
-      : replayElapsedMs >= totalReplayDurationMs
-        ? 1
-        : 0
-    : 1;
-  const showResolvedBoard = resolvedBoardProgress === 1;
-  const interactionLocked =
-    hasAnimatedReplay && replayElapsedMs < totalReplayDurationMs;
-  const activeStepIndex = isReplaying
-    ? Math.min(
-        actionSteps.length - 1,
-        Math.floor(replayElapsedMs / replayStepDurationMs),
-      )
-    : null;
-  const activeStep =
-    activeStepIndex === null ? null : actionSteps[activeStepIndex];
-  const activeStepElapsedMs =
-    activeStepIndex === null
-      ? 0
-      : replayElapsedMs - activeStepIndex * replayStepDurationMs;
-  const activeStepProgress =
-    activeStepIndex === null
-      ? 0
-      : easeInOut(
-          Math.min(1, activeStepElapsedMs / REPLAY_CAMERA_MOVE_DURATION_MS),
-        );
-  const activeActionElapsedMs =
-    activeStepIndex === null
-      ? 0
-      : Math.max(0, activeStepElapsedMs - REPLAY_CAMERA_MOVE_DURATION_MS);
-  const activeActionProgress =
-    activeStepIndex === null
-      ? 0
-      : easeInOut(
-          Math.min(
-            1,
-            activeActionElapsedMs / REPLAY_ACTION_ANIMATION_DURATION_MS,
-          ),
-        );
-  const isAnimatingAction =
-    activeStepIndex !== null &&
-    activeStepElapsedMs >= REPLAY_CAMERA_MOVE_DURATION_MS &&
-    activeActionElapsedMs <=
-      REPLAY_ACTION_ANIMATION_DURATION_MS + REPLAY_ACTION_HOLD_DURATION_MS;
-  const currentCameraFrame = isReplaying
-    ? interpolateCameraFrame(
-        activeStepIndex && activeStepIndex > 0
-          ? (cameraFrames[activeStepIndex - 1] ?? DEFAULT_CAMERA_FRAME)
-          : DEFAULT_CAMERA_FRAME,
-        cameraFrames[activeStepIndex ?? 0] ?? DEFAULT_CAMERA_FRAME,
-        activeStepProgress,
-      )
-    : isResetting
-      ? interpolateCameraFrame(
-          cameraFrames[cameraFrames.length - 1] ?? DEFAULT_CAMERA_FRAME,
-          DEFAULT_CAMERA_FRAME,
-          resolvedBoardProgress,
-        )
-      : DEFAULT_CAMERA_FRAME;
-  const replayLayerStyle = {
-    transformOrigin: '0 0',
-    transform: `translate3d(${currentCameraFrame.translateX}px, ${currentCameraFrame.translateY}px, 0) scale(${currentCameraFrame.scale})`,
-    willChange: interactionLocked ? 'transform' : 'auto',
-  } as const;
-  const activeAnnotation = isReplaying
-    ? (activeStep?.annotation ?? null)
-    : null;
-  const activeMovingUnit = isReplaying
-    ? (activeStep?.movingUnit ?? null)
-    : null;
-  const activeMoveProgress = activeMovingUnit ? activeActionProgress : 0;
-  const mapAnnotations = activeAnnotation ? [activeAnnotation] : [];
+  const isMoving = hasAnimation && loopElapsedMs < LOOP_MOVE_MS;
+  const isFading =
+    hasAnimation &&
+    loopElapsedMs >= LOOP_MOVE_MS &&
+    loopElapsedMs < LOOP_MOVE_MS + LOOP_FADE_MS;
+
+  const moveProgress = isMoving
+    ? easeInOut(loopElapsedMs / LOOP_MOVE_MS)
+    : isFading
+      ? 1
+      : 0;
+
+  const overlayOpacity = isMoving
+    ? 1
+    : isFading
+      ? 1 - easeInOut((loopElapsedMs - LOOP_MOVE_MS) / LOOP_FADE_MS)
+      : 0;
+
+  const hiddenSourceProvinces =
+    overlayOpacity > 0
+      ? movingUnits.map((unit) => getBaseProvince(unit.from))
+      : [];
+
   const beforeOverlayUnits =
     payload.phase === 'retreat_submission'
       ? payload.boardBefore.dislodgedUnits.map((unit) => ({
@@ -449,45 +199,15 @@ export function GamePhaseResultsScreen({
           isEmphasized: true,
         }))
       : [];
-  const afterOverlayUnits =
-    payload.phase === 'order_submission'
-      ? payload.boardAfter.dislodgedUnits.map((unit) => ({
-          id: `after-${unit.power}-${unit.province}`,
-          province: unit.province,
-          power: unit.power,
-          unitType: unit.unitType,
-          coast: unit.coast ?? null,
-          isGhost: true,
-          isEmphasized: true,
-        }))
-      : [];
-  const beforeOpacity = 1 - resolvedBoardProgress;
-  const afterOpacity = resolvedBoardProgress;
-  const beforeMapClassName = '';
-  const afterMapClassName = '';
-  const annotationClassName =
-    activeAnnotation || showResolvedBoard || isResetting
-      ? 'opacity-100 translate-y-0'
-      : 'opacity-0 translate-y-1';
-  const replayMapKey = `${phaseResultId}-${replayCount}`;
+
+  const boardPositions = hasAnimation
+    ? payload.boardBefore.positions
+    : payload.boardAfter.positions;
+  const boardSupplyCenters = hasAnimation
+    ? payload.boardBefore.supplyCenters
+    : payload.boardAfter.supplyCenters;
+
   const alerts = payload.alerts ?? [];
-  const hiddenBeforeUnits =
-    activeMovingUnit && isAnimatingAction
-      ? [getBaseProvince(activeMovingUnit.from)]
-      : [];
-  const hiddenAfterUnits =
-    activeMovingUnit &&
-    activeActionElapsedMs < REPLAY_ACTION_ANIMATION_DURATION_MS &&
-    resolvedBoardProgress < 1
-      ? [getBaseProvince(activeMovingUnit.to)]
-      : [];
-  const replayStatusLabel = showResolvedBoard
-    ? 'Resolved board'
-    : isResetting
-      ? 'Settling board'
-      : activeStepIndex !== null
-        ? `Reviewing action ${activeStepIndex + 1} of ${actionSteps.length}`
-        : 'Adjudicating';
 
   return (
     <div className="min-h-dvh bg-[linear-gradient(160deg,#f7f1df_0%,#e4d5b3_40%,#d0c2a6_100%)] px-4 py-6 md:px-6">
@@ -522,15 +242,6 @@ export function GamePhaseResultsScreen({
           <div className="flex gap-3">
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setReplayCount((value) => value + 1)}
-            >
-              <RotateCcw className="mr-2 size-4" />
-              Replay
-            </Button>
-            <Button
-              type="button"
               className="rounded-full"
               disabled={acknowledgeMutation.isPending}
               onClick={async () => {
@@ -549,95 +260,52 @@ export function GamePhaseResultsScreen({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(24rem,0.95fr)]">
           <Card className="overflow-hidden rounded-[2rem] border-black/10 bg-white/86 shadow-xl backdrop-blur">
             <CardContent className="p-0">
-              <div
-                ref={mapViewportRef}
-                className="relative h-[58vh] min-h-[32rem] overflow-hidden"
-              >
-                <div
-                  className={`absolute inset-0 z-[1] ${interactionLocked ? 'pointer-events-none' : 'pointer-events-auto'}`}
-                  style={replayLayerStyle}
-                >
-                  <div
-                    className={`absolute inset-0 ${beforeMapClassName} pointer-events-none`}
-                    style={{ opacity: beforeOpacity }}
-                  >
-                    <DiplomacyMap
-                      key={`before-${replayMapKey}`}
-                      positions={payload.boardBefore.positions}
-                      supplyCenters={payload.boardBefore.supplyCenters}
-                      annotations={mapAnnotations}
-                      overlayUnits={beforeOverlayUnits}
-                      hiddenUnitProvinces={hiddenBeforeUnits}
-                      interactionLocked
-                    />
-                  </div>
-                  <div
-                    className={`absolute inset-0 ${afterMapClassName} ${
-                      interactionLocked
-                        ? 'pointer-events-none'
-                        : 'pointer-events-auto'
-                    }`}
-                    style={{ opacity: afterOpacity }}
-                  >
-                    <DiplomacyMap
-                      key={`after-${replayMapKey}`}
-                      positions={payload.boardAfter.positions}
-                      supplyCenters={payload.boardAfter.supplyCenters}
-                      annotations={mapAnnotations}
-                      overlayUnits={afterOverlayUnits}
-                      hiddenUnitProvinces={hiddenAfterUnits}
-                      interactionLocked={interactionLocked}
-                    />
-                  </div>
-                  {mapData && activeMovingUnit ? (
-                    <div className="pointer-events-none absolute inset-0 z-[5]">
-                      <svg
-                        viewBox={`0 0 ${mapData.width} ${mapData.height}`}
-                        className="h-full w-full"
-                        preserveAspectRatio="xMidYMid meet"
+              <div className="relative h-[58vh] min-h-[32rem] overflow-hidden">
+                <DiplomacyMap
+                  key={phaseResultId}
+                  positions={boardPositions}
+                  supplyCenters={boardSupplyCenters}
+                  annotations={payload.annotations}
+                  overlayUnits={beforeOverlayUnits}
+                  hiddenUnitProvinces={hiddenSourceProvinces}
+                  renderOverlay={(mapData) =>
+                    movingUnits.length > 0 && overlayOpacity > 0 ? (
+                      <g
+                        className="moving-units"
+                        pointerEvents="none"
+                        opacity={overlayOpacity}
                       >
-                        {(() => {
+                        {movingUnits.map((unit) => {
                           const start =
-                            mapData.centers[activeMovingUnit.from] ??
-                            mapData.centers[
-                              getBaseProvince(activeMovingUnit.from)
-                            ];
+                            mapData.centers[unit.from] ??
+                            mapData.centers[getBaseProvince(unit.from)];
                           const end =
-                            mapData.centers[activeMovingUnit.to] ??
-                            mapData.centers[
-                              getBaseProvince(activeMovingUnit.to)
-                            ];
+                            mapData.centers[unit.to] ??
+                            mapData.centers[getBaseProvince(unit.to)];
                           if (!start || !end) {
                             return null;
                           }
 
                           const cx =
-                            start.x + (end.x - start.x) * activeMoveProgress;
+                            start.x + (end.x - start.x) * moveProgress;
                           const cy =
-                            start.y + (end.y - start.y) * activeMoveProgress;
+                            start.y + (end.y - start.y) * moveProgress;
 
                           return (
                             <UnitMarker
-                              key={activeMovingUnit.id}
+                              key={unit.id}
                               cx={cx}
                               cy={cy}
-                              power={activeMovingUnit.power}
-                              unitType={activeMovingUnit.unitType}
+                              power={unit.power}
+                              unitType={unit.unitType}
                               isEmphasized
                             />
                           );
-                        })()}
-                      </svg>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="pointer-events-none absolute left-4 top-4 z-10">
-                  <div
-                    className={`rounded-full border border-black/10 bg-white/84 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-lg backdrop-blur transition-all duration-300 ease-out ${annotationClassName}`}
-                  >
-                    {replayStatusLabel}
-                  </div>
-                </div>
+                        })}
+                      </g>
+                    ) : null
+                  }
+                />
               </div>
             </CardContent>
           </Card>
