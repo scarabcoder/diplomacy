@@ -750,13 +750,13 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <Link
             to="/"
-            className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
+            className="hidden shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/55 transition hover:text-white md:inline"
           >
             Back
           </Link>
-          <div className="h-4 w-px shrink-0 bg-white/15" />
+          <div className="hidden h-4 w-px shrink-0 bg-white/15 md:block" />
           <h1 className="truncate text-sm font-semibold">{roomName}</h1>
-          <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.18em] text-white/75">
+          <span className="hidden shrink-0 rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.18em] text-white/75 md:inline">
             {roomCode}
           </span>
         </div>
