@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch';
-import { Button } from '@/components/ui/button.tsx';
 import classicMapAssetUrl from '@/domain/game/assets-classic-map.svg?url';
 import type { OrderAnnotation } from '@/domain/game/engine/order-drafting.ts';
 import { PROVINCES } from '@/domain/game/engine/map-data.ts';
@@ -37,7 +36,6 @@ interface DiplomacyMapProps {
     isEmphasized?: boolean;
   }>;
   hiddenUnitProvinces?: string[];
-  hideControls?: boolean;
   interactionLocked?: boolean;
   onProvinceClick?: (provinceId: string) => void;
   onUnitClick?: (provinceId: string) => void;
@@ -269,7 +267,6 @@ export function DiplomacyMap({
   annotations = [],
   overlayUnits = [],
   hiddenUnitProvinces = [],
-  hideControls = false,
   interactionLocked = false,
   onProvinceClick,
   onUnitClick,
@@ -314,8 +311,7 @@ export function DiplomacyMap({
         pinch={{ disabled: interactionLocked }}
         doubleClick={{ disabled: true }}
       >
-        {({ resetTransform, zoomIn, zoomOut }) => (
-          <>
+        {() => (
             <TransformComponent
               wrapperStyle={{ width: '100%', height: '100%' }}
               contentStyle={{ width: '100%', height: '100%' }}
@@ -599,42 +595,6 @@ export function DiplomacyMap({
                   })()}
               </svg>
             </TransformComponent>
-
-            <div className="pointer-events-none absolute right-4 top-4 z-10 flex gap-2">
-              <div
-                className={
-                  hideControls
-                    ? 'pointer-events-none opacity-0'
-                    : 'pointer-events-auto flex gap-2 rounded-full border border-black/10 bg-white/85 p-1 shadow-lg backdrop-blur transition-opacity'
-                }
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-full px-3"
-                  onClick={() => zoomOut(0.2)}
-                >
-                  -
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-full px-3"
-                  onClick={() => resetTransform(250)}
-                >
-                  100%
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-full px-3"
-                  onClick={() => zoomIn(0.2)}
-                >
-                  +
-                </Button>
-              </div>
-            </div>
-          </>
         )}
       </TransformWrapper>
     </div>

@@ -568,7 +568,6 @@ export function GamePhaseResultsScreen({
                       annotations={mapAnnotations}
                       overlayUnits={beforeOverlayUnits}
                       hiddenUnitProvinces={hiddenBeforeUnits}
-                      hideControls
                       interactionLocked
                     />
                   </div>
@@ -587,7 +586,6 @@ export function GamePhaseResultsScreen({
                       annotations={mapAnnotations}
                       overlayUnits={afterOverlayUnits}
                       hiddenUnitProvinces={hiddenAfterUnits}
-                      hideControls
                       interactionLocked={interactionLocked}
                     />
                   </div>
