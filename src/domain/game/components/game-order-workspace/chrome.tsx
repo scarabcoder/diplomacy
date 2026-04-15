@@ -613,7 +613,7 @@ function PlayersWindowLayer({
 
   return (
     <div ref={panelRef}>
-      <div className="pointer-events-none absolute right-0 top-[calc(100%+0.75rem)] z-30 hidden sm:block">
+      <div className="pointer-events-none absolute right-0 top-[calc(100%+0.75rem)] z-30 hidden motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:fill-mode-both sm:block">
         <PlayersWindowCard
           onClose={onClose}
           playersWindowSections={playersWindowSections}
@@ -628,12 +628,12 @@ function PlayersWindowLayer({
       <button
         type="button"
         aria-label="Close player roster"
-        className="fixed inset-0 z-50 bg-[color:color-mix(in_oklab,var(--accent-navy)_18%,transparent)] sm:hidden"
+        className="fixed inset-0 z-30 bg-[color:color-mix(in_oklab,var(--accent-navy)_18%,transparent)] motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150 sm:hidden"
         onClick={onClose}
       />
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-50 sm:hidden">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 sm:hidden">
         <div className="px-0 pt-20">
-          <div className="max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain">
+          <div className="max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top motion-safe:duration-250 motion-safe:fill-mode-both">
             <PlayersWindowCard
               mobile
               onClose={onClose}
@@ -755,119 +755,123 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
   }, [isPlayersWindowOpen]);
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 border-b border-black/10 bg-[#111827]/78 text-white backdrop-blur-md">
-      <div className="pointer-events-auto relative flex min-h-12 items-center justify-between gap-3 px-3 py-2 sm:px-4">
-        <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex md:gap-3">
-          <Link
-            to="/"
-            className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
-          >
-            Back
-          </Link>
-          <div className="h-4 w-px shrink-0 bg-white/15" />
-          <h1 className="truncate text-sm font-semibold">{roomName}</h1>
-          <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.18em] text-white/75">
-            {roomCode}
-          </span>
-        </div>
-        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-base font-medium text-white/82 md:block">
-          <span>{bannerMeta}</span>
-        </div>
-        <div className="flex flex-1 items-center justify-end gap-1.5 md:flex-none md:gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            aria-pressed={isMessagesOpen}
-            aria-label={isMessagesOpen ? 'Hide messages' : 'Show messages'}
-            onClick={onToggleMessages}
-            className={cn(
-              'h-9 min-w-0 flex-1 justify-center gap-1.5 rounded-full border px-2 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[7.25rem] md:flex-initial md:justify-start md:gap-2.5 md:px-3',
-              isMessagesOpen
-                ? 'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white'
-                : 'border-white/10 bg-white/[0.08] text-white/82',
-            )}
-          >
-            <MessageSquare className="size-4 shrink-0" />
-            <span className="text-sm font-semibold text-white md:hidden">
-              {unreadThreadCount}
+    <>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 border-b border-black/10 bg-[#111827]/78 text-white backdrop-blur-md">
+        <div className="pointer-events-auto relative flex min-h-12 items-center justify-between gap-3 px-3 py-2 sm:px-4">
+          <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex md:gap-3">
+            <Link
+              to="/"
+              className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
+            >
+              Back
+            </Link>
+            <div className="h-4 w-px shrink-0 bg-white/15" />
+            <h1 className="truncate text-sm font-semibold">{roomName}</h1>
+            <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.18em] text-white/75">
+              {roomCode}
             </span>
-            <span className="hidden min-w-0 flex-1 md:block">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                Messages
+          </div>
+          <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-base font-medium text-white/82 md:block">
+            <span>{bannerMeta}</span>
+          </div>
+          <div className="flex flex-1 items-center justify-end gap-1.5 md:flex-none md:gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              aria-pressed={isMessagesOpen}
+              aria-label={isMessagesOpen ? 'Hide messages' : 'Show messages'}
+              onClick={onToggleMessages}
+              className={cn(
+                'h-9 min-w-0 flex-1 justify-center gap-1.5 rounded-full border px-2 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[7.25rem] md:flex-initial md:justify-start md:gap-2.5 md:px-3',
+                isMessagesOpen
+                  ? 'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white'
+                  : 'border-white/10 bg-white/[0.08] text-white/82',
+              )}
+            >
+              <MessageSquare className="size-4 shrink-0" />
+              <span className="text-sm font-semibold text-white md:hidden">
+                {unreadThreadCount}
               </span>
-              <span className="block text-sm font-semibold leading-tight text-white">
-                {unreadThreadCount > 0 ? unreadThreadCount : 'Open'}
-                <span className="ml-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/72">
-                  {unreadThreadCount === 1
-                    ? 'unread'
-                    : unreadThreadCount > 1
+              <span className="hidden min-w-0 flex-1 md:block">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
+                  Messages
+                </span>
+                <span className="block text-sm font-semibold leading-tight text-white">
+                  {unreadThreadCount > 0 ? unreadThreadCount : 'Open'}
+                  <span className="ml-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/72">
+                    {unreadThreadCount === 1
                       ? 'unread'
-                      : 'panel'}
+                      : unreadThreadCount > 1
+                        ? 'unread'
+                        : 'panel'}
+                  </span>
                 </span>
               </span>
-            </span>
-          </Button>
-          <Button
-            ref={playersButtonRef}
-            type="button"
-            variant="ghost"
-            aria-controls={playersWindowPanelId}
-            aria-expanded={isPlayersWindowOpen}
-            aria-haspopup="dialog"
-            aria-label={
-              isPlayersWindowOpen ? 'Hide player roster' : 'Show player roster'
-            }
-            onClick={onTogglePlayersWindow}
-            className={cn(
-              'h-9 min-w-0 flex-1 justify-center gap-1.5 rounded-full border px-2 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[7.25rem] md:flex-initial md:justify-start md:gap-2.5 md:px-3',
-              playersButtonStatusTone,
-              isPlayersWindowOpen &&
-                'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white',
-            )}
-          >
-            <Users className="size-4 shrink-0" />
-            <span className="text-sm font-semibold text-white md:hidden">
-              {activeCount}
-            </span>
-            <span className="hidden min-w-0 flex-1 md:block">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                Players
-              </span>
-              <span className="block text-sm font-semibold leading-tight text-white">
+            </Button>
+            <Button
+              ref={playersButtonRef}
+              type="button"
+              variant="ghost"
+              aria-controls={playersWindowPanelId}
+              aria-expanded={isPlayersWindowOpen}
+              aria-haspopup="dialog"
+              aria-label={
+                isPlayersWindowOpen
+                  ? 'Hide player roster'
+                  : 'Show player roster'
+              }
+              onClick={onTogglePlayersWindow}
+              className={cn(
+                'h-9 min-w-0 flex-1 justify-center gap-1.5 rounded-full border px-2 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[7.25rem] md:flex-initial md:justify-start md:gap-2.5 md:px-3',
+                playersButtonStatusTone,
+                isPlayersWindowOpen &&
+                  'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white',
+              )}
+            >
+              <Users className="size-4 shrink-0" />
+              <span className="text-sm font-semibold text-white md:hidden">
                 {activeCount}
-                <span className="ml-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/72">
-                  active
+              </span>
+              <span className="hidden min-w-0 flex-1 md:block">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
+                  Players
+                </span>
+                <span className="block text-sm font-semibold leading-tight text-white">
+                  {activeCount}
+                  <span className="ml-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/72">
+                    active
+                  </span>
                 </span>
               </span>
-            </span>
-            <span className="hidden rounded-full border border-white/12 bg-white/[0.08] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/86 sm:inline-flex">
-              {playersButtonSummary}
-            </span>
-          </Button>
-          {buildStatusChip ? (
-            <HeaderStatusChip {...buildStatusChip} compact />
-          ) : null}
-          {submissionStatusChip ? (
-            <HeaderStatusChip {...submissionStatusChip} compact />
-          ) : null}
+              <span className="hidden rounded-full border border-white/12 bg-white/[0.08] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/86 sm:inline-flex">
+                {playersButtonSummary}
+              </span>
+            </Button>
+            {buildStatusChip ? (
+              <HeaderStatusChip {...buildStatusChip} compact />
+            ) : null}
+            {submissionStatusChip ? (
+              <HeaderStatusChip {...submissionStatusChip} compact />
+            ) : null}
+          </div>
         </div>
-        <PlayersWindowLayer
-          isOpen={isPlayersWindowOpen}
-          onClose={onClosePlayersWindow}
-          panelRef={playersWindowRef}
-          playersWindowSections={playersWindowSections}
-          panelId={playersWindowPanelId}
-          titleId={playersWindowTitleId}
-          descriptionId={playersWindowDescriptionId}
-          closeButtonRef={playersWindowCloseButtonRef}
-          onMessagePlayer={onMessagePlayer}
-          onInspectBot={onInspectBot}
-        />
+        <div className="pointer-events-auto border-t border-white/10 px-3 py-1.5 text-center text-[15px] font-medium text-white/82 md:hidden sm:px-4">
+          <div>{bannerMeta}</div>
+        </div>
       </div>
-      <div className="pointer-events-auto border-t border-white/10 px-3 py-1.5 text-center text-[15px] font-medium text-white/82 md:hidden sm:px-4">
-        <div>{bannerMeta}</div>
-      </div>
-    </div>
+      <PlayersWindowLayer
+        isOpen={isPlayersWindowOpen}
+        onClose={onClosePlayersWindow}
+        panelRef={playersWindowRef}
+        playersWindowSections={playersWindowSections}
+        panelId={playersWindowPanelId}
+        titleId={playersWindowTitleId}
+        descriptionId={playersWindowDescriptionId}
+        closeButtonRef={playersWindowCloseButtonRef}
+        onMessagePlayer={onMessagePlayer}
+        onInspectBot={onInspectBot}
+      />
+    </>
   );
 });
 
@@ -933,7 +937,7 @@ export const WorkspaceFlyoutLayer = memo(function WorkspaceFlyoutLayer({
   return (
     <>
       <div className="pointer-events-none absolute left-20 top-16 bottom-4 z-20 hidden items-center sm:flex">
-        <div className="max-h-[calc(100vh-6rem)] overflow-y-auto">
+        <div className="max-h-[calc(100vh-6rem)] overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-3 motion-safe:duration-250 motion-safe:fill-mode-both">
           <FlyoutCard
             title={flyout.title}
             subtitle={flyout.subtitle}
@@ -945,7 +949,7 @@ export const WorkspaceFlyoutLayer = memo(function WorkspaceFlyoutLayer({
       </div>
 
       <div className="pointer-events-none absolute inset-x-3 bottom-20 z-20 sm:hidden">
-        <div className="max-h-[45vh] overflow-y-auto">
+        <div className="max-h-[45vh] overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-250 motion-safe:fill-mode-both">
           <FlyoutCard
             title={flyout.title}
             subtitle={flyout.subtitle}

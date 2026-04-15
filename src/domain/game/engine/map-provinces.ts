@@ -360,7 +360,7 @@ export const PROVINCES: Record<string, ProvinceData> = {
     supplyCenter: false,
     homePower: null,
   },
-  gol: {
+  lyo: {
     name: 'Gulf of Lyon',
     type: 'water',
     supplyCenter: false,
@@ -384,13 +384,13 @@ export const PROVINCES: Record<string, ProvinceData> = {
     supplyCenter: false,
     homePower: null,
   },
-  mid: {
+  mao: {
     name: 'Mid-Atlantic Ocean',
     type: 'water',
     supplyCenter: false,
     homePower: null,
   },
-  nat: {
+  nao: {
     name: 'North Atlantic Ocean',
     type: 'water',
     supplyCenter: false,
@@ -402,7 +402,7 @@ export const PROVINCES: Record<string, ProvinceData> = {
     supplyCenter: false,
     homePower: null,
   },
-  nrg: {
+  nwg: {
     name: 'Norwegian Sea',
     type: 'water',
     supplyCenter: false,
@@ -414,7 +414,7 @@ export const PROVINCES: Record<string, ProvinceData> = {
     supplyCenter: false,
     homePower: null,
   },
-  tyn: {
+  tys: {
     name: 'Tyrrhenian Sea',
     type: 'water',
     supplyCenter: false,

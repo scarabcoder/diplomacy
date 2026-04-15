@@ -589,25 +589,11 @@ fn coast_to_app(coast: diplomacy::geo::Coast) -> String {
 }
 
 fn app_province_to_rust(province: &str) -> String {
-    match province {
-        "gol" => String::from("lyo"),
-        "mid" => String::from("mao"),
-        "nat" => String::from("nao"),
-        "nrg" => String::from("nwg"),
-        "tyn" => String::from("tys"),
-        other => String::from(other),
-    }
+    String::from(province)
 }
 
 fn rust_province_to_app(province: &str) -> String {
-    match province {
-        "lyo" => String::from("gol"),
-        "mao" => String::from("mid"),
-        "nao" => String::from("nat"),
-        "nwg" => String::from("nrg"),
-        "tys" => String::from("tyn"),
-        other => String::from(other),
-    }
+    String::from(province)
 }
 
 fn parse_region_string(input: &str) -> (String, Option<String>) {

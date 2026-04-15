@@ -1,4 +1,4 @@
-import type { ElementType, HTMLAttributes, ReactNode } from 'react';
+import type { CSSProperties, ElementType, HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/utils.ts';
 
 export function WarRoomStage({
@@ -15,23 +15,27 @@ export function ParchmentPanel({
   children,
   className,
   as: Comp = 'section',
+  style,
 }: Readonly<{
   children: ReactNode;
   className?: string;
   as?: ElementType;
+  style?: CSSProperties;
 }>) {
-  return <Comp className={cn('parchment-panel', className)}>{children}</Comp>;
+  return <Comp className={cn('parchment-panel', className)} style={style}>{children}</Comp>;
 }
 
 export function CommandPanel({
   children,
   className,
+  style,
 }: Readonly<{
   children: ReactNode;
   className?: string;
+  style?: CSSProperties;
 }>) {
   return (
-    <section className={cn('command-panel', className)}>{children}</section>
+    <section className={cn('command-panel', className)} style={style}>{children}</section>
   );
 }
 

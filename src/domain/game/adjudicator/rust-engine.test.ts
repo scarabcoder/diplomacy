@@ -89,7 +89,7 @@ describe('rust-engine adjudicator', () => {
           unitType: 'fleet',
           unitProvince: 'wes',
           orderType: 'move',
-          targetProvince: 'gol',
+          targetProvince: 'lyo',
           supportedUnitProvince: null,
           viaConvoy: false,
           coast: null,
@@ -109,7 +109,7 @@ describe('rust-engine adjudicator', () => {
 
     expect(result.orderResults).toHaveLength(2);
     expect(result.orderResults.every((order) => order.success)).toBe(true);
-    expect(result.newPositions.gol).toMatchObject({
+    expect(result.newPositions.lyo).toMatchObject({
       power: 'france',
       unitType: 'fleet',
     });
@@ -120,7 +120,7 @@ describe('rust-engine adjudicator', () => {
     expect(result.standoffProvinces).toEqual([]);
   });
 
-  it('allows fleets to move from nth to nrg', async () => {
+  it('allows fleets to move from nth to nwg', async () => {
     const validation = await validateMainOrders(
       {
         nth: { power: 'england', unitType: 'fleet', coast: null },
@@ -131,7 +131,7 @@ describe('rust-engine adjudicator', () => {
           unitType: 'fleet',
           unitProvince: 'nth',
           orderType: 'move',
-          targetProvince: 'nrg',
+          targetProvince: 'nwg',
           supportedUnitProvince: null,
           viaConvoy: false,
           coast: null,
@@ -152,7 +152,7 @@ describe('rust-engine adjudicator', () => {
           unitType: 'fleet',
           unitProvince: 'nth',
           orderType: 'move',
-          targetProvince: 'nrg',
+          targetProvince: 'nwg',
           supportedUnitProvince: null,
           viaConvoy: false,
           coast: null,
@@ -165,7 +165,7 @@ describe('rust-engine adjudicator', () => {
       success: true,
       resultType: 'executed',
     });
-    expect(result.newPositions.nrg).toMatchObject({
+    expect(result.newPositions.nwg).toMatchObject({
       power: 'england',
       unitType: 'fleet',
     });
@@ -180,7 +180,7 @@ describe('rust-engine adjudicator', () => {
         {
           power: 'france',
           unitType: 'fleet',
-          province: 'gol',
+          province: 'lyo',
           coast: null,
           dislodgedFrom: 'tys',
           retreatOptions: ['spa/sc'],
@@ -190,7 +190,7 @@ describe('rust-engine adjudicator', () => {
         {
           power: 'france',
           unitType: 'fleet',
-          unitProvince: 'gol',
+          unitProvince: 'lyo',
           retreatTo: 'spa/sc',
         },
       ],

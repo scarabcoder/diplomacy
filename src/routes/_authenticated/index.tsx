@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Fragment, useMemo, useState } from 'react';
 import {
   useMutation,
@@ -9,6 +9,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowRight,
   DoorOpen,
+  Loader2,
   LogOut,
   Plus,
   ScrollText,
@@ -136,7 +137,7 @@ function HomePage() {
   return (
     <WarRoomStage>
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
-        <ParchmentPanel className="px-5 py-5 sm:px-6">
+        <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 0 } as CSSProperties}>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
               <SectionKicker>Rooms</SectionKicker>
@@ -163,7 +164,7 @@ function HomePage() {
         </ParchmentPanel>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)]">
-          <CommandPanel className="overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
+          <CommandPanel className="stagger-panel overflow-hidden px-5 py-5 sm:px-6 sm:py-6" style={{ '--stagger-index': 1 } as CSSProperties}>
             <div className="space-y-5">
               <div className="space-y-2">
                 <SectionKicker className="text-[oklch(0.84_0.04_80)] before:bg-[color:color-mix(in_oklab,var(--accent-brass)_72%,white_28%)]">
@@ -197,7 +198,11 @@ function HomePage() {
                   disabled={!roomName.trim() || createRoomMutation.isPending}
                   type="submit"
                 >
-                  <Plus className="size-4" />
+                  {createRoomMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Plus className="size-4" />
+                  )}
                   {createRoomMutation.isPending ? 'Creating...' : 'Create room'}
                 </Button>
               </form>
@@ -210,7 +215,7 @@ function HomePage() {
             </div>
           </CommandPanel>
 
-          <ParchmentPanel className="px-5 py-5 sm:px-6 sm:py-6">
+          <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6 sm:py-6" style={{ '--stagger-index': 2 } as CSSProperties}>
             <div className="space-y-5">
               <div className="space-y-2">
                 <SectionKicker>Join Room</SectionKicker>
@@ -251,13 +256,17 @@ function HomePage() {
                   disabled={joinCode.length !== 6 || joinRoomMutation.isPending}
                   type="submit"
                 >
-                  <DoorOpen className="size-4" />
+                  {joinRoomMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <DoorOpen className="size-4" />
+                  )}
                   {joinRoomMutation.isPending ? 'Joining...' : 'Join room'}
                 </Button>
               </form>
 
               {joinRoomMutation.isError ? (
-                <p className="rounded-[1rem] bg-[oklch(0.92_0.04_28)] px-4 py-3 text-sm text-destructive">
+                <p className="rounded-[1rem] bg-[oklch(0.92_0.04_28)] px-4 py-3 text-sm text-destructive motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200 motion-safe:fill-mode-both">
                   {joinRoomMutation.error.message}
                 </p>
               ) : null}
@@ -271,9 +280,9 @@ function HomePage() {
         </div>
 
         {sortedRooms.length === 0 ? (
-          <ParchmentPanel className="px-6 py-8 text-center sm:px-10">
+          <ParchmentPanel className="stagger-panel px-6 py-8 text-center sm:px-10" style={{ '--stagger-index': 3 } as CSSProperties}>
             <div className="mx-auto max-w-2xl space-y-4">
-              <div className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--accent-brass)_28%,white_72%)] text-[color:var(--accent-oxblood)]">
+              <div className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--accent-brass)_28%,white_72%)] text-[color:var(--accent-oxblood)] motion-safe:animate-[gentle-breathe_3s_ease-in-out_infinite]">
                 <ScrollText className="size-7" />
               </div>
               <div className="space-y-2">
@@ -294,12 +303,14 @@ function HomePage() {
                 emptyCopy="No active rooms need attention right now."
                 icon={<Sword className="size-4" />}
                 rooms={groupedRooms.playing}
+                staggerIndex={3}
                 title="In progress"
               />
               <RoomListSection
                 emptyCopy="No open lobbies at the moment."
                 icon={<Users className="size-4" />}
                 rooms={groupedRooms.lobby}
+                staggerIndex={4}
                 title="Open lobbies"
               />
             </div>
@@ -307,6 +318,7 @@ function HomePage() {
               emptyCopy="Completed or abandoned rooms appear here."
               icon={<ScrollText className="size-4" />}
               rooms={groupedRooms.closed}
+              staggerIndex={5}
               title="Closed rooms"
             />
           </div>
@@ -321,6 +333,7 @@ function RoomListSection({
   icon,
   rooms,
   emptyCopy,
+  staggerIndex = 0,
 }: Readonly<{
   title: string;
   icon: ReactNode;
@@ -333,9 +346,10 @@ function RoomListSection({
     myPlayer: { role: string; isSpectator: boolean; power: Power | null };
   }>;
   emptyCopy: string;
+  staggerIndex?: number;
 }>) {
   return (
-    <ParchmentPanel className="px-5 py-5 sm:px-6">
+    <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': staggerIndex } as CSSProperties}>
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -357,8 +371,8 @@ function RoomListSection({
           </div>
         ) : (
           <div className="space-y-3">
-            {rooms.map((room) => (
-              <HomeRoomCard key={room.id} room={room} />
+            {rooms.map((room, index) => (
+              <HomeRoomCard key={room.id} room={room} index={index} />
             ))}
           </div>
         )}
@@ -369,6 +383,7 @@ function RoomListSection({
 
 function HomeRoomCard({
   room,
+  index = 0,
 }: Readonly<{
   room: {
     id: string;
@@ -378,6 +393,7 @@ function HomeRoomCard({
     updatedAt: Date | string;
     myPlayer: { role: string; isSpectator: boolean; power: Power | null };
   };
+  index?: number;
 }>) {
   const meta = roomStatusMeta[room.status];
   const membershipItems: ReactNode[] = [
@@ -398,8 +414,9 @@ function HomeRoomCard({
 
   return (
     <Link
-      className="group block rounded-[1.35rem] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
+      className="group block rounded-[1.35rem] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300 motion-safe:fill-mode-both"
       params={{ roomId: room.id }}
+      style={{ animationDelay: `${index * 60}ms` }}
       to="/rooms/$roomId"
     >
       <div className="rounded-[1.35rem] border border-black/10 bg-white/58 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] transition duration-200 ease-out group-hover:-translate-y-0.5 group-hover:bg-white/72">

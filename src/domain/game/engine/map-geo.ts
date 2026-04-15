@@ -699,7 +699,7 @@ export const DIPLOMACY_GEO: FeatureCollection<Polygon, ProvinceGeoProperties> =
         [18.5, 58.0],
         [17.5, 59.0],
       ]),
-      p('gol', 'Gulf of Lyon', 'water', false, [
+      p('lyo', 'Gulf of Lyon', 'water', false, [
         [3.0, 43.5],
         [4.5, 43.0],
         [6.0, 43.2],
@@ -744,7 +744,7 @@ export const DIPLOMACY_GEO: FeatureCollection<Polygon, ProvinceGeoProperties> =
         [-9.0, 53.0],
         [-8.0, 54.5],
       ]),
-      p('mid', 'Mid-Atlantic Ocean', 'water', false, [
+      p('mao', 'Mid-Atlantic Ocean', 'water', false, [
         [-15.0, 50.0],
         [-9.0, 51.0],
         [-7.0, 50.0],
@@ -758,7 +758,7 @@ export const DIPLOMACY_GEO: FeatureCollection<Polygon, ProvinceGeoProperties> =
         [-12.0, 34.0],
         [-15.0, 34.0],
       ]),
-      p('nat', 'North Atlantic Ocean', 'water', false, [
+      p('nao', 'North Atlantic Ocean', 'water', false, [
         [-15.0, 62.0],
         [-8.0, 62.0],
         [-6.5, 57.5],
@@ -782,7 +782,7 @@ export const DIPLOMACY_GEO: FeatureCollection<Polygon, ProvinceGeoProperties> =
         [-1.5, 52.5],
         [-1.5, 55.0],
       ]),
-      p('nrg', 'Norwegian Sea', 'water', false, [
+      p('nwg', 'Norwegian Sea', 'water', false, [
         [-8.0, 62.0],
         [-4.0, 66.0],
         [5.0, 72.0],
@@ -805,7 +805,7 @@ export const DIPLOMACY_GEO: FeatureCollection<Polygon, ProvinceGeoProperties> =
         [8.0, 56.0],
         [5.0, 56.0],
       ]),
-      p('tyn', 'Tyrrhenian Sea', 'water', false, [
+      p('tys', 'Tyrrhenian Sea', 'water', false, [
         [9.0, 42.5],
         [10.0, 42.5],
         [11.0, 42.0],

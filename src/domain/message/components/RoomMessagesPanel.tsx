@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, MessageSquare, Plus, Send, Users, X } from 'lucide-react';
+import { ArrowLeft, Check, MessageSquare, Plus, Send, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
 import type { Power } from '@/domain/game/engine/types.ts';
 import { PowerName } from '@/domain/game/power-presentation.tsx';
@@ -231,6 +231,7 @@ export function RoomMessagesPanel({
 }) {
   const queryClient = useQueryClient();
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [mobileShowList, setMobileShowList] = useState(true);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [composerSelection, setComposerSelection] = useState<string[]>([]);
   const [draftBody, setDraftBody] = useState('');
@@ -356,13 +357,14 @@ export function RoomMessagesPanel({
       !isOpen ||
       isComposerOpen ||
       selectedThreadId ||
-      firstThreadId == null
+      firstThreadId == null ||
+      (mobileShowList && window.matchMedia('(max-width: 639px)').matches)
     ) {
       return;
     }
 
     setSelectedThreadId(firstThreadId);
-  }, [firstThreadId, isComposerOpen, isOpen, selectedThreadId]);
+  }, [firstThreadId, isComposerOpen, isOpen, mobileShowList, selectedThreadId]);
 
   useEffect(() => {
     if (
@@ -395,6 +397,12 @@ export function RoomMessagesPanel({
       threadId: selectedThreadId,
     });
   }, [activeThread, isOpen, markReadMutation, roomId, selectedThreadId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMobileShowList(true);
+    }
+  }, [isOpen]);
 
   if (!isOpen || !canAccessMessages || !myPlayer) {
     return null;
@@ -434,10 +442,10 @@ export function RoomMessagesPanel({
       <button
         type="button"
         aria-label="Close messages"
-        className="fixed inset-0 z-40 bg-[color:color-mix(in_oklab,var(--accent-navy)_24%,transparent)]"
+        className="fixed inset-0 z-40 bg-[color:color-mix(in_oklab,var(--accent-navy)_24%,transparent)] motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
         onClick={onClose}
       />
-      <div className="fixed inset-y-0 right-0 z-50 hidden w-[27rem] max-w-[calc(100vw-1rem)] sm:block">
+      <div className="fixed inset-y-0 right-0 z-50 hidden w-[27rem] max-w-[calc(100vw-1rem)] motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:fade-in-80 motion-safe:duration-300 sm:block">
         <div className="flex h-full flex-col border-l border-[color:color-mix(in_oklab,var(--border)_74%,var(--accent-brass)_26%)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--paper)_94%,white_6%)_0%,color-mix(in_oklab,var(--paper-strong)_88%,var(--accent-brass)_12%)_100%)] shadow-[-20px_0_48px_rgba(66,48,24,0.24)]">
           <DrawerContent
             panelTitle={panelTitle}
@@ -486,7 +494,7 @@ export function RoomMessagesPanel({
           />
         </div>
       </div>
-      <div className="fixed inset-x-0 bottom-0 top-16 z-50 sm:hidden">
+      <div className="fixed inset-x-0 bottom-0 top-16 z-50 motion-safe:animate-in motion-safe:slide-in-from-bottom motion-safe:fade-in-80 motion-safe:duration-300 sm:hidden">
         <div className="flex h-full flex-col overflow-hidden rounded-t-[1.9rem] border border-b-0 border-[color:color-mix(in_oklab,var(--border)_74%,var(--accent-brass)_26%)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--paper)_96%,white_4%)_0%,color-mix(in_oklab,var(--paper-strong)_90%,var(--accent-brass)_10%)_100%)] shadow-[0_-20px_48px_rgba(66,48,24,0.24)]">
           <DrawerContent
             panelTitle={panelTitle}
@@ -511,6 +519,7 @@ export function RoomMessagesPanel({
             }
             roomId={roomId}
             mobile
+            mobileShowList={mobileShowList}
             typingByThread={typingByThread}
             onClose={onClose}
             onDraftBodyChange={setDraftBody}
@@ -523,6 +532,7 @@ export function RoomMessagesPanel({
             onSelectThread={(threadId) => {
               setSelectedThreadId(threadId);
               setIsComposerOpen(false);
+              setMobileShowList(false);
             }}
             onTogglePlayerSelection={(playerId) => {
               setComposerSelection((current) =>
@@ -533,6 +543,10 @@ export function RoomMessagesPanel({
             }}
             onStartConversation={() => void handleStartConversation()}
             onSendMessage={() => void handleSendMessage()}
+            onDeselectThread={() => {
+              setSelectedThreadId(null);
+              setMobileShowList(true);
+            }}
           />
         </div>
       </div>
@@ -568,6 +582,8 @@ function DrawerContent({
   onTogglePlayerSelection,
   onStartConversation,
   onSendMessage,
+  onDeselectThread,
+  mobileShowList,
 }: {
   panelTitle: string;
   roomStatus: 'lobby' | 'playing' | 'completed' | 'abandoned';
@@ -601,6 +617,8 @@ function DrawerContent({
   onTogglePlayerSelection: (playerId: string) => void;
   onStartConversation: () => void;
   onSendMessage: () => void;
+  onDeselectThread?: () => void;
+  mobileShowList?: boolean;
 }) {
   const activeParticipants = (activeThread?.participantPlayerIds ?? [])
     .map((playerId) => playersById.get(playerId))
@@ -689,8 +707,24 @@ function DrawerContent({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-rows-[minmax(14rem,18rem)_minmax(0,1fr)]">
-          <div className="overflow-y-auto border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] px-3 py-3">
+        <div
+          className={cn(
+            'grid min-h-0 flex-1 grid-rows-[minmax(14rem,18rem)_minmax(0,1fr)]',
+            mobile &&
+              !mobileShowList &&
+              (isComposerOpen || selectedThreadId) &&
+              'grid-rows-[0fr_minmax(0,1fr)]',
+          )}
+        >
+          <div
+            className={cn(
+              'overflow-y-auto border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] px-3 py-3',
+              mobile &&
+                !mobileShowList &&
+                (isComposerOpen || selectedThreadId) &&
+                'invisible min-h-0 overflow-hidden border-b-0 py-0',
+            )}
+          >
             {threads.length > 0 ? (
               <div className="space-y-2">
                 {threads.map((thread) => (
@@ -760,12 +794,29 @@ function DrawerContent({
             {isComposerOpen ? (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-oxblood)]">
-                      New Thread
-                    </div>
-                    <div className="mt-1 text-lg font-semibold text-[color:var(--ink-strong)]">
-                      Choose participants
+                  <div className="flex items-center gap-2">
+                    {mobile && onDeselectThread ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 rounded-full"
+                        aria-label="Back to threads"
+                        onClick={() => {
+                          onCloseComposer();
+                          onDeselectThread();
+                        }}
+                      >
+                        <ArrowLeft className="size-4" />
+                      </Button>
+                    ) : null}
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-oxblood)]">
+                        New Thread
+                      </div>
+                      <div className="mt-1 text-lg font-semibold text-[color:var(--ink-strong)]">
+                        Choose participants
+                      </div>
                     </div>
                   </div>
                   <Button
@@ -849,6 +900,16 @@ function DrawerContent({
             ) : activeThread ? (
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] pb-3">
+                  {mobile && onDeselectThread ? (
+                    <button
+                      type="button"
+                      className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-soft)] hover:text-[color:var(--ink-strong)]"
+                      onClick={onDeselectThread}
+                    >
+                      <ArrowLeft className="size-3.5" />
+                      Threads
+                    </button>
+                  ) : null}
                   <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-oxblood)]">
                     {activeThread.kind === 'direct'
                       ? 'Direct Thread'

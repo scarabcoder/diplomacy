@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useState } from 'react';
+import { type CSSProperties, type Dispatch, type SetStateAction, useState } from 'react';
 import {
   useMutation,
   useQuery,
@@ -12,6 +12,7 @@ import {
   Copy,
   Crown,
   Gavel,
+  Loader2,
   MessageSquare,
   Play,
   Sparkles,
@@ -185,7 +186,7 @@ function RoomPage() {
     <>
       <WarRoomStage>
         <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
-          <ParchmentPanel className="px-5 py-5 sm:px-6">
+          <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 0 } as CSSProperties}>
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-3">
                 <Link
@@ -336,16 +337,19 @@ function LobbyView({
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-3">
           <LobbySummaryCard
+            delay={0}
             label="Seats filled"
             tone="warning"
             value={`${activePlayers.length}/7`}
           />
           <LobbySummaryCard
+            delay={50}
             label="Powers claimed"
             tone="info"
             value={`${claimedPlayers.length}/7`}
           />
           <LobbySummaryCard
+            delay={100}
             label="Ready to start"
             tone={allReady ? 'success' : 'neutral'}
             value={
@@ -356,7 +360,7 @@ function LobbyView({
           />
         </div>
 
-        <ParchmentPanel className="px-5 py-5 sm:px-6">
+        <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 1 } as CSSProperties}>
           <div className="space-y-5">
             <div className="space-y-2">
               <SectionKicker>Power Assignment</SectionKicker>
@@ -545,7 +549,7 @@ function LobbyView({
       </div>
 
       <div className="space-y-6">
-        <ParchmentPanel className="sticky top-5 px-5 py-5 sm:px-6">
+        <ParchmentPanel className="stagger-panel sticky top-5 px-5 py-5 sm:px-6" style={{ '--stagger-index': 2 } as CSSProperties}>
           <div className="space-y-5">
             <div className="space-y-2">
               <SectionKicker>Room Status</SectionKicker>
@@ -595,7 +599,9 @@ function LobbyView({
                   onClick={() => void handleSetReady(!myPlayer?.isReady)}
                   variant={myPlayer?.isReady ? 'outline' : 'default'}
                 >
-                  {myPlayer?.isReady ? (
+                  {setReadyMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : myPlayer?.isReady ? (
                     <Check className="size-4" />
                   ) : (
                     <Sparkles className="size-4" />
@@ -616,7 +622,11 @@ function LobbyView({
                     }}
                     variant="outline"
                   >
-                    <Users className="size-4" />
+                    {fillBotsMutation.isPending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Users className="size-4" />
+                    )}
                     {fillBotsMutation.isPending
                       ? 'Filling seats...'
                       : 'Fill empty seats with bots'}
@@ -629,7 +639,11 @@ function LobbyView({
                     disabled={!allReady || startGameMutation.isPending}
                     onClick={() => void handleStartGame()}
                   >
-                    <Play className="size-4" />
+                    {startGameMutation.isPending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Play className="size-4" />
+                    )}
                     {startGameMutation.isPending
                       ? 'Starting game...'
                       : 'Start game'}
@@ -639,7 +653,7 @@ function LobbyView({
             ) : null}
 
             {startGameMutation.isError ? (
-              <p className="rounded-[1rem] bg-[oklch(0.92_0.04_28)] px-4 py-3 text-sm text-destructive">
+              <p className="rounded-[1rem] bg-[oklch(0.92_0.04_28)] px-4 py-3 text-sm text-destructive motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200 motion-safe:fill-mode-both">
                 {startGameMutation.error.message}
               </p>
             ) : null}
@@ -690,7 +704,7 @@ function LobbyCodeActions({
         </Button>
       ) : null}
       <Button
-        className="h-11 rounded-full border border-black/10 bg-white/70 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
+        className={`h-11 rounded-full border border-black/10 bg-white/70 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white ${copied ? 'motion-safe:animate-[seal-pulse_300ms_ease]' : ''}`}
         onClick={() => void handleCopy()}
         type="button"
         variant="outline"
@@ -706,13 +720,18 @@ function LobbySummaryCard({
   label,
   value,
   tone,
+  delay = 0,
 }: Readonly<{
   label: string;
   value: string;
   tone: 'neutral' | 'success' | 'warning' | 'info';
+  delay?: number;
 }>) {
   return (
-    <ParchmentPanel className="px-4 py-4">
+    <ParchmentPanel
+      className="px-4 py-4 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-300 motion-safe:fill-mode-both"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="space-y-3">
         <StatusSeal tone={tone}>{label}</StatusSeal>
         <div className="font-display text-3xl text-foreground">{value}</div>
