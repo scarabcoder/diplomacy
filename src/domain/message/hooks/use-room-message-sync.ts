@@ -66,11 +66,12 @@ export function useRoomMessageSync(roomId: string, enabled = true) {
 
       // Update state
       setTypingByThread((prev) => {
-        const next = new Map(prev);
-        const players = next.get(threadId) ?? [];
-        if (!players.includes(playerId)) {
-          next.set(threadId, [...players, playerId]);
+        const players = prev.get(threadId) ?? [];
+        if (players.includes(playerId)) {
+          return prev;
         }
+        const next = new Map(prev);
+        next.set(threadId, [...players, playerId]);
         return next;
       });
     },

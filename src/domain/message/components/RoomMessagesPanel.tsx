@@ -638,6 +638,11 @@ function DrawerContent({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevThreadIdRef = useRef<string | null>(null);
 
+  const lastMessageId =
+    activeMessages.length > 0
+      ? activeMessages[activeMessages.length - 1]!.id
+      : null;
+
   // Scroll to bottom on thread switch (before paint) so user never sees top
   useLayoutEffect(() => {
     if (selectedThreadId && selectedThreadId !== prevThreadIdRef.current) {
@@ -647,14 +652,14 @@ function DrawerContent({
         el.scrollTop = el.scrollHeight;
       }
     }
-  }, [selectedThreadId, activeMessages]);
+  }, [selectedThreadId]);
 
-  // Smooth-scroll to bottom when new messages arrive within the same thread
+  // Smooth-scroll to bottom when a genuinely new message arrives
   useEffect(() => {
     const el = messagesContainerRef.current;
-    if (!el || !activeMessages.length) return;
+    if (!el || !lastMessageId) return;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [activeMessages]);
+  }, [lastMessageId]);
 
   return (
     <>
