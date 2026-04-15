@@ -48,11 +48,8 @@ async function loadModule(): Promise<WasmModule> {
     modulePromise = (async () => {
       const glueModule =
         (await import('../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.js')) as WasmGlueModule;
-      const wasmUrl = new URL(
-        '../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.wasm',
-        import.meta.url,
-      );
-      const wasmBytes = await Bun.file(wasmUrl).arrayBuffer();
+      const wasmPath = `${process.cwd()}/rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.wasm`;
+      const wasmBytes = await Bun.file(wasmPath).arrayBuffer();
       const { instance } = await WebAssembly.instantiate(wasmBytes, {
         './diplomacy_wasm_bg.js': glueModule,
       });

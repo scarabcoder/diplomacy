@@ -36,6 +36,7 @@ WORKDIR /app
 
 # Copy built artifacts and runtime dependencies
 COPY --from=builder /app/dist/ dist/
+COPY --from=builder /app/rust/diplomacy-wasm/pkg/ rust/diplomacy-wasm/pkg/
 COPY --from=builder /app/node_modules/ node_modules/
 COPY --from=builder /app/drizzle/ drizzle/
 COPY --from=builder /app/package.json .
