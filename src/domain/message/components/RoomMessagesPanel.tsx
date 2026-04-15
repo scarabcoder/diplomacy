@@ -658,56 +658,60 @@ function DrawerContent({
 
   return (
     <>
-      <div
-        className={cn(
-          'flex items-start justify-between gap-4 border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] px-4 py-4',
-          mobile && 'px-4 pt-3',
-        )}
-      >
-        <div className="min-w-0">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--accent-oxblood)]">
-            Private Channels
-          </div>
-          <h2 className="mt-1 font-display text-[1.45rem] leading-none text-[color:var(--ink-strong)]">
-            {panelTitle}
-          </h2>
-          <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
-            {unreadThreadCount > 0
-              ? `${unreadThreadCount} thread${unreadThreadCount === 1 ? '' : 's'} need attention.`
-              : 'Coordinate privately with room players.'}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-full border border-[color:color-mix(in_oklab,var(--border)_76%,white_24%)] bg-[color:color-mix(in_oklab,var(--paper)_72%,white_28%)] text-[color:var(--ink-soft)] hover:bg-[color:color-mix(in_oklab,var(--paper)_62%,white_38%)] hover:text-[color:var(--ink-strong)]"
-          aria-label="Close messages"
-          onClick={onClose}
+      {mobile && !mobileShowList ? null : (
+        <div
+          className={cn(
+            'flex items-start justify-between gap-4 border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] px-4 py-4',
+            mobile && 'px-4 pt-3',
+          )}
         >
-          <X className="size-4" />
-        </Button>
-      </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--accent-oxblood)]">
+              Private Channels
+            </div>
+            <h2 className="mt-1 font-display text-[1.45rem] leading-none text-[color:var(--ink-strong)]">
+              {panelTitle}
+            </h2>
+            <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
+              {unreadThreadCount > 0
+                ? `${unreadThreadCount} thread${unreadThreadCount === 1 ? '' : 's'} need attention.`
+                : 'Coordinate privately with room players.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full border border-[color:color-mix(in_oklab,var(--border)_76%,white_24%)] bg-[color:color-mix(in_oklab,var(--paper)_72%,white_28%)] text-[color:var(--ink-soft)] hover:bg-[color:color-mix(in_oklab,var(--paper)_62%,white_38%)] hover:text-[color:var(--ink-strong)]"
+            aria-label="Close messages"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="rounded-full border border-[color:color-mix(in_oklab,var(--border)_74%,var(--accent-brass)_26%)] bg-white/72 px-3 py-1.5 text-xs uppercase tracking-[0.16em] text-[color:var(--ink-soft)]">
-              {threads.length} thread{threads.length === 1 ? '' : 's'}
+        {mobile && !mobileShowList ? null : (
+          <div className="border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="rounded-full border border-[color:color-mix(in_oklab,var(--border)_74%,var(--accent-brass)_26%)] bg-white/72 px-3 py-1.5 text-xs uppercase tracking-[0.16em] text-[color:var(--ink-soft)]">
+                {threads.length} thread{threads.length === 1 ? '' : 's'}
+              </div>
+              {canStartThread ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-full border-black/10 bg-white/72 text-xs font-semibold uppercase tracking-[0.16em] hover:bg-white"
+                  onClick={onOpenComposer}
+                >
+                  <Plus className="size-4" />
+                  New Thread
+                </Button>
+              ) : null}
             </div>
-            {canStartThread ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-full border-black/10 bg-white/72 text-xs font-semibold uppercase tracking-[0.16em] hover:bg-white"
-                onClick={onOpenComposer}
-              >
-                <Plus className="size-4" />
-                New Thread
-              </Button>
-            ) : null}
           </div>
-        </div>
+        )}
 
         <div
           className={cn(
@@ -821,16 +825,29 @@ function DrawerContent({
                       </div>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 rounded-full"
-                    aria-label="Close composer"
-                    onClick={onCloseComposer}
-                  >
-                    <X className="size-4" />
-                  </Button>
+                  {mobile ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-full border border-[color:color-mix(in_oklab,var(--border)_76%,white_24%)] bg-[color:color-mix(in_oklab,var(--paper)_72%,white_28%)] text-[color:var(--ink-soft)] hover:bg-[color:color-mix(in_oklab,var(--paper)_62%,white_38%)] hover:text-[color:var(--ink-strong)]"
+                      aria-label="Close messages"
+                      onClick={onClose}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-full"
+                      aria-label="Close composer"
+                      onClick={onCloseComposer}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  )}
                 </div>
                 <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
                   Select one or more room players. The exact participant set
@@ -903,14 +920,26 @@ function DrawerContent({
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="border-b border-[color:color-mix(in_oklab,var(--border)_72%,white_28%)] pb-3">
                   {mobile && onDeselectThread ? (
-                    <button
-                      type="button"
-                      className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-soft)] hover:text-[color:var(--ink-strong)]"
-                      onClick={onDeselectThread}
-                    >
-                      <ArrowLeft className="size-3.5" />
-                      Threads
-                    </button>
+                    <div className="mb-2 flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-soft)] hover:text-[color:var(--ink-strong)]"
+                        onClick={onDeselectThread}
+                      >
+                        <ArrowLeft className="size-3.5" />
+                        Threads
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 rounded-full border border-[color:color-mix(in_oklab,var(--border)_76%,white_24%)] bg-[color:color-mix(in_oklab,var(--paper)_72%,white_28%)] text-[color:var(--ink-soft)] hover:bg-[color:color-mix(in_oklab,var(--paper)_62%,white_38%)] hover:text-[color:var(--ink-strong)]"
+                        aria-label="Close messages"
+                        onClick={onClose}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
                   ) : null}
                   <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-oxblood)]">
                     {activeThread.kind === 'direct'
@@ -924,17 +953,6 @@ function DrawerContent({
                       myPlayer.id,
                       roomStatus,
                     )}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {activeParticipants
-                      .filter((player) => player.id !== myPlayer.id)
-                      .map((player) => (
-                        <ParticipantChip
-                          key={player.id}
-                          player={player}
-                          roomStatus={roomStatus}
-                        />
-                      ))}
                   </div>
                   {activeThread.status === 'archived' ? (
                     <div className="mt-3 rounded-[1.2rem] border border-[color:color-mix(in_oklab,var(--accent-brass)_40%,white_60%)] bg-[color:color-mix(in_oklab,var(--accent-brass)_12%,white_88%)] px-3 py-3 text-sm text-[color:var(--ink-soft)]">
