@@ -476,6 +476,7 @@ export function RoomMessagesPanel({
             onOpenComposer={() => {
               setComposerSelection([]);
               setIsComposerOpen(true);
+              setMobileShowList(false);
             }}
             onCloseComposer={() => setIsComposerOpen(false)}
             onSelectThread={(threadId) => {
@@ -527,6 +528,7 @@ export function RoomMessagesPanel({
             onOpenComposer={() => {
               setComposerSelection([]);
               setIsComposerOpen(true);
+              setMobileShowList(false);
             }}
             onCloseComposer={() => setIsComposerOpen(false)}
             onSelectThread={(threadId) => {
