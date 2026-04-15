@@ -628,10 +628,10 @@ function PlayersWindowLayer({
       <button
         type="button"
         aria-label="Close player roster"
-        className="fixed inset-0 z-30 bg-[color:color-mix(in_oklab,var(--accent-navy)_18%,transparent)] sm:hidden"
+        className="fixed inset-0 z-50 bg-[color:color-mix(in_oklab,var(--accent-navy)_18%,transparent)] sm:hidden"
         onClick={onClose}
       />
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30 sm:hidden">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-50 sm:hidden">
         <div className="px-0 pt-20">
           <div className="max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain">
             <PlayersWindowCard
