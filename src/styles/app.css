@@ -110,7 +110,7 @@
     min-height: 100%;
   }
   body {
-    min-height: 100vh;
+    min-height: 100dvh;
     background:
       radial-gradient(
         circle at top,
@@ -128,7 +128,7 @@
     @apply bg-background text-foreground antialiased;
   }
   #app {
-    min-height: 100vh;
+    min-height: 100dvh;
   }
   a,
   button,
@@ -152,7 +152,7 @@
 
   .war-room-stage {
     position: relative;
-    min-height: 100vh;
+    min-height: 100dvh;
     overflow: hidden;
     background:
       radial-gradient(

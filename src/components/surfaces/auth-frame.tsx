@@ -18,7 +18,7 @@ export function AuthFrame({
   children: ReactNode;
 }>) {
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-6 sm:px-6 lg:px-10">
+    <div className="mx-auto flex min-h-dvh w-full max-w-6xl items-center px-4 py-6 sm:px-6 lg:px-10">
       <ParchmentPanel className="w-full overflow-hidden p-0">
         <div className="grid gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(18rem,0.72fr)]">
           <div className="space-y-6 px-5 py-6 sm:px-7 sm:py-7 lg:px-8 lg:py-9">

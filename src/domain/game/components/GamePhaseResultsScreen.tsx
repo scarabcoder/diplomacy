@@ -490,7 +490,7 @@ export function GamePhaseResultsScreen({
         : 'Adjudicating';
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(160deg,#f7f1df_0%,#e4d5b3_40%,#d0c2a6_100%)] px-4 py-6 md:px-6">
+    <div className="min-h-dvh bg-[linear-gradient(160deg,#f7f1df_0%,#e4d5b3_40%,#d0c2a6_100%)] px-4 py-6 md:px-6">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <div className="flex flex-col gap-4 rounded-[2rem] border border-black/10 bg-white/88 p-6 shadow-xl backdrop-blur md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">

@@ -97,7 +97,7 @@ export function GameOrderWorkspace(props: GameOrderWorkspaceProps) {
     (workspace.activeFlyout === 'action' ? null : flyout);
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[#e7dfc8] text-foreground">
+    <div className="relative h-dvh overflow-hidden bg-[#e7dfc8] text-foreground">
       <WorkspaceHeader
         roomName={props.roomName}
         roomCode={props.roomCode}

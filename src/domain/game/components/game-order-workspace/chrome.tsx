@@ -633,7 +633,7 @@ function PlayersWindowLayer({
       />
       <div className="pointer-events-none fixed inset-x-0 top-0 z-30 sm:hidden">
         <div className="px-0 pt-20">
-          <div className="max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top motion-safe:duration-250 motion-safe:fill-mode-both">
+          <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top motion-safe:duration-250 motion-safe:fill-mode-both">
             <PlayersWindowCard
               mobile
               onClose={onClose}
@@ -937,7 +937,7 @@ export const WorkspaceFlyoutLayer = memo(function WorkspaceFlyoutLayer({
   return (
     <>
       <div className="pointer-events-none absolute left-20 top-16 bottom-4 z-20 hidden items-center sm:flex">
-        <div className="max-h-[calc(100vh-6rem)] overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-3 motion-safe:duration-250 motion-safe:fill-mode-both">
+        <div className="max-h-[calc(100dvh-6rem)] overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-3 motion-safe:duration-250 motion-safe:fill-mode-both">
           <FlyoutCard
             title={flyout.title}
             subtitle={flyout.subtitle}

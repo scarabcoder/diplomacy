@@ -185,7 +185,7 @@ function RoomPage() {
   return (
     <>
       <WarRoomStage>
-        <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
+        <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
           <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 0 } as CSSProperties}>
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-3">
@@ -799,7 +799,7 @@ function ActiveRoomView({
 
   if (room.status === 'completed') {
     return (
-      <div className="min-h-screen p-8">
+      <div className="min-h-dvh p-8">
         <div className="mx-auto max-w-3xl">
           <CompletedView
             room={room}
