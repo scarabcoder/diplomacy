@@ -3,7 +3,7 @@ import { join } from 'path';
 const distClientDir = join(import.meta.dir, 'dist', 'client');
 
 const handler = await import('./dist/server/server.js').then(
-  (m) => m.default,
+  (m) => m.default.fetch,
 );
 
 Bun.serve({
