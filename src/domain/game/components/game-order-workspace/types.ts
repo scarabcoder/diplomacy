@@ -122,6 +122,7 @@ export type ToolbarAction = {
 export type HeaderStatusChipData = {
   icon: ElementType;
   label: ReactNode;
+  compactLabel?: ReactNode;
   className?: string;
 };
 

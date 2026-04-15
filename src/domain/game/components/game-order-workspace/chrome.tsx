@@ -148,6 +148,7 @@ function ToolbarButton({ action }: { action: ToolbarAction }) {
 function HeaderStatusChip({
   icon: Icon,
   label,
+  compactLabel,
   className,
   compact,
 }: HeaderStatusChipData & { compact?: boolean }) {
@@ -155,12 +156,19 @@ function HeaderStatusChip({
     <span
       className={cn(
         'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold tracking-[0.08em] shadow-sm',
-        compact && 'flex-1 justify-center px-2 py-1.5 md:flex-initial md:px-3.5',
+        compact && 'flex-1 justify-center gap-1.5 px-2 py-1.5 md:flex-initial md:gap-2 md:px-3.5',
         className,
       )}
     >
       <Icon className="size-4 shrink-0" />
-      <span className={cn(compact && 'hidden md:inline')}>{label}</span>
+      {compact && compactLabel ? (
+        <>
+          <span className="md:hidden">{compactLabel}</span>
+          <span className="hidden md:inline">{label}</span>
+        </>
+      ) : (
+        <span>{label}</span>
+      )}
     </span>
   );
 }

@@ -4,9 +4,10 @@ import {
   ArrowRight,
   Castle,
   Check,
+  CircleCheck,
+  Clock,
   HandHelping,
   ScrollText,
-  Send,
   Shield,
   Ship,
   ShipWheel,
@@ -536,13 +537,13 @@ export function useGameOrderWorkspace({
   const submissionProgress = submissionStatus
     ? `${submissionStatus.submitted.length}/${submissionStatus.submitted.length + submissionStatus.pending.length} submitted`
     : null;
+  const allSubmitted =
+    submissionStatus && submissionStatus.pending.length === 0;
   const submissionStatusChip: HeaderStatusChipData | null = submissionProgress
     ? {
-        icon:
-          submissionStatus && submissionStatus.pending.length === 0
-            ? Check
-            : Send,
+        icon: allSubmitted ? CircleCheck : Clock,
         label: submissionProgress,
+        compactLabel: `${submissionStatus!.submitted.length}/${submissionStatus!.submitted.length + submissionStatus!.pending.length}`,
         className: 'border-sky-300/30 bg-sky-400/16 text-sky-50',
       }
     : null;
@@ -573,12 +574,14 @@ export function useGameOrderWorkspace({
                 </span>
               </span>
             ),
+            compactLabel: `${buildProgress.completed}/${buildProgress.total}`,
             className:
               'border-emerald-300/30 bg-emerald-400/18 text-emerald-50',
           }
         : {
             icon: Trash2,
             label: `${buildProgress.completed}/${buildProgress.total} disbands`,
+            compactLabel: `${buildProgress.completed}/${buildProgress.total}`,
             className: 'border-amber-300/30 bg-amber-400/18 text-amber-50',
           }
       : null;
