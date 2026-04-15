@@ -3,17 +3,15 @@ import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch';
 import { Button } from '@/components/ui/button.tsx';
 import classicMapAssetUrl from '@/domain/game/assets-classic-map.svg?url';
 import type { OrderAnnotation } from '@/domain/game/engine/order-drafting.ts';
-import {
-  PROVINCES,
-  getBaseProvince,
-  getCoast,
-} from '@/domain/game/engine/map-data.ts';
+import { PROVINCES } from '@/domain/game/engine/map-data.ts';
 import { POWER_COLORS } from '@/domain/game/engine/types.ts';
 import type {
   Power,
   SupplyCenterOwnership,
   UnitPositions,
+  UnitType,
 } from '@/domain/game/engine/types.ts';
+import { getBaseProvince, getCoast } from '@/domain/game/lib/province-refs.ts';
 import { useClassicMap } from '@/domain/game/hooks/use-classic-map.ts';
 import { Territory } from './Territory.tsx';
 import { UnitMarker } from './UnitMarker.tsx';
@@ -29,8 +27,58 @@ interface DiplomacyMapProps {
   validTargets?: string[];
   highlightedUnitProvinces?: string[];
   annotations?: OrderAnnotation[];
+  overlayUnits?: Array<{
+    id: string;
+    province: string;
+    power: Power;
+    unitType: UnitType;
+    coast?: string | null;
+    isGhost?: boolean;
+    isEmphasized?: boolean;
+  }>;
+  hiddenUnitProvinces?: string[];
+  hideControls?: boolean;
+  interactionLocked?: boolean;
   onProvinceClick?: (provinceId: string) => void;
   onUnitClick?: (provinceId: string) => void;
+}
+
+function getAnnotationColor(annotation: OrderAnnotation): string {
+  const tone = 'tone' in annotation ? annotation.tone : undefined;
+
+  if (tone === 'failure') {
+    return '#ef4444';
+  }
+
+  if (tone === 'info') {
+    return '#94a3b8';
+  }
+
+  if (annotation.kind === 'retreat') {
+    return '#10b981';
+  }
+
+  if (annotation.kind === 'support') {
+    return '#f59e0b';
+  }
+
+  if (annotation.kind === 'convoy') {
+    return '#38bdf8';
+  }
+
+  if (annotation.kind === 'build') {
+    return '#65a30d';
+  }
+
+  if (annotation.kind === 'disband') {
+    return '#ef4444';
+  }
+
+  if (annotation.kind === 'hold') {
+    return '#22c55e';
+  }
+
+  return '#f8fafc';
 }
 
 function getTerritoryFill(
@@ -64,10 +112,7 @@ function getAnnotationCenter(
   centers: Record<string, { x: number; y: number }>,
   provinceRef: string,
 ) {
-  return (
-    centers[provinceRef]
-    ?? centers[getBaseProvince(provinceRef)]
-  );
+  return centers[provinceRef] ?? centers[getBaseProvince(provinceRef)];
 }
 
 function drawArrowPath(
@@ -96,6 +141,7 @@ function renderAnnotation(
   }
 
   if (annotation.kind === 'hold') {
+    const color = getAnnotationColor(annotation);
     return (
       <circle
         key={annotation.id}
@@ -103,7 +149,7 @@ function renderAnnotation(
         cy={from.y}
         r={16}
         fill="none"
-        stroke="#22c55e"
+        stroke={color}
         strokeWidth={3}
         strokeDasharray="4 3"
       />
@@ -111,15 +157,16 @@ function renderAnnotation(
   }
 
   if (annotation.kind === 'build') {
+    const color = getAnnotationColor(annotation);
     return (
       <g key={annotation.id}>
         <circle
           cx={from.x}
           cy={from.y}
           r={14}
-          fill="#ecfccb"
+          fill={color}
           fillOpacity={0.92}
-          stroke="#65a30d"
+          stroke={color}
           strokeWidth={2.5}
           strokeDasharray="4 3"
         />
@@ -131,7 +178,7 @@ function renderAnnotation(
           fontSize={11}
           fontWeight="bold"
           fontFamily="system-ui, sans-serif"
-          fill="#365314"
+          fill="#0f172a"
         >
           {annotation.unitType === 'fleet' ? 'F' : 'A'}
         </text>
@@ -140,6 +187,7 @@ function renderAnnotation(
   }
 
   if (annotation.kind === 'disband') {
+    const color = getAnnotationColor(annotation);
     return (
       <g key={annotation.id}>
         <circle
@@ -147,12 +195,12 @@ function renderAnnotation(
           cy={from.y}
           r={16}
           fill="none"
-          stroke="#ef4444"
+          stroke={color}
           strokeWidth={3}
         />
         <path
           d={`M ${from.x - 10} ${from.y - 10} L ${from.x + 10} ${from.y + 10} M ${from.x + 10} ${from.y - 10} L ${from.x - 10} ${from.y + 10}`}
-          stroke="#ef4444"
+          stroke={color}
           strokeWidth={3}
           strokeLinecap="round"
         />
@@ -165,14 +213,7 @@ function renderAnnotation(
     return null;
   }
 
-  const color =
-    annotation.kind === 'retreat'
-      ? '#10b981'
-      : annotation.kind === 'support'
-        ? '#f59e0b'
-        : annotation.kind === 'convoy'
-          ? '#38bdf8'
-          : '#f8fafc';
+  const color = getAnnotationColor(annotation);
   const dashArray =
     annotation.kind === 'support'
       ? '5 4'
@@ -195,24 +236,25 @@ function renderAnnotation(
         strokeLinecap="round"
         markerEnd={marker}
       />
-      {annotation.aux && (() => {
-        const aux = getAnnotationCenter(centers, annotation.aux);
-        if (!aux) {
-          return null;
-        }
+      {annotation.aux &&
+        (() => {
+          const aux = getAnnotationCenter(centers, annotation.aux);
+          if (!aux) {
+            return null;
+          }
 
-        return (
-          <path
-            d={drawArrowPath(to, aux)}
-            fill="none"
-            stroke={color}
-            strokeWidth={3}
-            strokeDasharray="5 4"
-            strokeLinecap="round"
-            markerEnd="url(#order-arrow)"
-          />
-        );
-      })()}
+          return (
+            <path
+              d={drawArrowPath(to, aux)}
+              fill="none"
+              stroke={color}
+              strokeWidth={3}
+              strokeDasharray="5 4"
+              strokeLinecap="round"
+              markerEnd="url(#order-arrow)"
+            />
+          );
+        })()}
     </g>
   );
 }
@@ -225,6 +267,10 @@ export function DiplomacyMap({
   validTargets = [],
   highlightedUnitProvinces = [],
   annotations = [],
+  overlayUnits = [],
+  hiddenUnitProvinces = [],
+  hideControls = false,
+  interactionLocked = false,
   onProvinceClick,
   onUnitClick,
 }: DiplomacyMapProps) {
@@ -232,8 +278,11 @@ export function DiplomacyMap({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const validTargetSet = new Set(validTargets);
   const highlightedUnitSet = new Set(highlightedUnitProvinces);
+  const hiddenUnitSet = new Set(hiddenUnitProvinces.map(getBaseProvince));
   const hoveredBaseId = hoveredId ? getBaseProvince(hoveredId) : null;
-  const selectedBaseProvince = selectedProvince ? getBaseProvince(selectedProvince) : null;
+  const selectedBaseProvince = selectedProvince
+    ? getBaseProvince(selectedProvince)
+    : null;
 
   if (!mapData) {
     return (
@@ -256,10 +305,13 @@ export function DiplomacyMap({
         initialScale={1}
         minScale={1}
         maxScale={5}
+        disabled={interactionLocked}
         centerOnInit
         centerZoomedOut
         limitToBounds
-        wheel={{ step: 0.08 }}
+        wheel={{ step: 0.08, disabled: interactionLocked }}
+        panning={{ disabled: interactionLocked }}
+        pinch={{ disabled: interactionLocked }}
         doubleClick={{ disabled: true }}
       >
         {({ resetTransform, zoomIn, zoomOut }) => (
@@ -318,12 +370,12 @@ export function DiplomacyMap({
                     if (!provinceData) return null;
 
                     const isSelected =
-                      selectedProvince === province.id
-                      || selectedBaseProvince === province.id
-                      || selectedUnitProvince === province.id;
+                      selectedProvince === province.id ||
+                      selectedBaseProvince === province.id ||
+                      selectedUnitProvince === province.id;
                     const isValidTarget =
-                      validTargetSet.has(province.id)
-                      || [...validTargetSet].some(
+                      validTargetSet.has(province.id) ||
+                      [...validTargetSet].some(
                         (target) => getBaseProvince(target) === province.id,
                       );
 
@@ -356,6 +408,12 @@ export function DiplomacyMap({
                     const isSelected = selectedProvince === province.id;
                     const isValidTarget = validTargetSet.has(province.id);
                     const isHovered = hoveredId === province.id;
+                    // Coast overlays only need to capture clicks when
+                    // they're explicitly valid targets (e.g., fleet moves
+                    // to a specific coast). Otherwise, let clicks pass
+                    // through to the base territory underneath.
+                    const needsInteraction =
+                      isSelected || isValidTarget;
 
                     return (
                       <path
@@ -368,13 +426,27 @@ export function DiplomacyMap({
                             ? '#fbbf24'
                             : 'transparent'
                         }
-                        strokeWidth={isSelected || isValidTarget || isHovered ? 3 : 0}
+                        strokeWidth={
+                          isSelected || isValidTarget || isHovered ? 3 : 0
+                        }
                         filter={isSelected ? 'url(#glow)' : undefined}
-                        cursor="pointer"
-                        pointerEvents="all"
-                        onClick={() => onProvinceClick?.(province.id)}
-                        onMouseEnter={() => setHoveredId(province.id)}
-                        onMouseLeave={() => setHoveredId(null)}
+                        cursor={needsInteraction ? 'pointer' : undefined}
+                        pointerEvents={needsInteraction ? 'all' : 'none'}
+                        onClick={
+                          needsInteraction
+                            ? () => onProvinceClick?.(province.id)
+                            : undefined
+                        }
+                        onMouseEnter={
+                          needsInteraction
+                            ? () => setHoveredId(province.id)
+                            : undefined
+                        }
+                        onMouseLeave={
+                          needsInteraction
+                            ? () => setHoveredId(null)
+                            : undefined
+                        }
                         style={{
                           transition: 'stroke-width 150ms ease',
                         }}
@@ -405,7 +477,9 @@ export function DiplomacyMap({
                       >
                         <circle
                           r={5}
-                          fill={owner ? POWER_COLORS[owner as Power] : '#6b7280'}
+                          fill={
+                            owner ? POWER_COLORS[owner as Power] : '#6b7280'
+                          }
                           stroke="#2f2417"
                           strokeWidth={1.5}
                         />
@@ -417,13 +491,17 @@ export function DiplomacyMap({
 
                 <g className="units">
                   {Object.entries(positions).map(([province, unit]) => {
+                    if (hiddenUnitSet.has(getBaseProvince(province))) {
+                      return null;
+                    }
+
                     const provinceRef = unit.coast
                       ? `${province}/${unit.coast}`
                       : province;
                     const center =
-                      mapData.centers[provinceRef]
-                      ?? mapData.centers[province]
-                      ?? mapData.centers[getBaseProvince(province)];
+                      mapData.centers[provinceRef] ??
+                      mapData.centers[province] ??
+                      mapData.centers[getBaseProvince(province)];
                     if (!center) return null;
 
                     return (
@@ -441,61 +519,95 @@ export function DiplomacyMap({
                   })}
                 </g>
 
-                {hoveredId && (() => {
-                  const provinceId = getBaseProvince(hoveredId);
-                  const province = PROVINCES[provinceId];
-                  const center =
-                    mapData.centers[hoveredId] ?? mapData.centers[provinceId];
-                  if (!province || !center) return null;
+                <g className="overlay-units" pointerEvents="none">
+                  {overlayUnits.map((unit) => {
+                    const provinceRef = unit.coast
+                      ? `${unit.province}/${unit.coast}`
+                      : unit.province;
+                    const center =
+                      mapData.centers[provinceRef] ??
+                      mapData.centers[unit.province] ??
+                      mapData.centers[getBaseProvince(unit.province)];
+                    if (!center) {
+                      return null;
+                    }
 
-                  const unit = positions[provinceId];
-                  const owner = supplyCenters[provinceId];
-                  const coast = getCoast(hoveredId);
-
-                  let tooltipText = province.name;
-                  if (coast) {
-                    tooltipText += ` (${coast.toUpperCase()})`;
-                  }
-                  if (unit) {
-                    tooltipText += ` — ${unit.unitType === 'army' ? 'Army' : 'Fleet'} (${unit.power})`;
-                  }
-                  if (owner) {
-                    tooltipText += province.supplyCenter
-                      ? ` [SC: ${owner}]`
-                      : ` [Owned by ${owner}]`;
-                  } else if (province.supplyCenter) {
-                    tooltipText += ' [SC: neutral]';
-                  }
-
-                  return (
-                    <g pointerEvents="none">
-                      <rect
-                        x={center.x - 86}
-                        y={center.y - 32}
-                        width={172}
-                        height={24}
-                        rx={4}
-                        fill="#111827"
-                        fillOpacity={0.92}
+                    return (
+                      <UnitMarker
+                        key={unit.id}
+                        cx={center.x}
+                        cy={center.y}
+                        power={unit.power}
+                        unitType={unit.unitType}
+                        isEmphasized={unit.isEmphasized}
+                        isGhost={unit.isGhost}
                       />
-                      <text
-                        x={center.x}
-                        y={center.y - 17}
-                        textAnchor="middle"
-                        fill="#fff"
-                        fontSize={10}
-                        fontFamily="system-ui, sans-serif"
-                      >
-                        {tooltipText}
-                      </text>
-                    </g>
-                  );
-                })()}
+                    );
+                  })}
+                </g>
+
+                {hoveredId &&
+                  (() => {
+                    const provinceId = getBaseProvince(hoveredId);
+                    const province = PROVINCES[provinceId];
+                    const center =
+                      mapData.centers[hoveredId] ?? mapData.centers[provinceId];
+                    if (!province || !center) return null;
+
+                    const unit = positions[provinceId];
+                    const owner = supplyCenters[provinceId];
+                    const coast = getCoast(hoveredId);
+
+                    let tooltipText = province.name;
+                    if (coast) {
+                      tooltipText += ` (${coast.toUpperCase()})`;
+                    }
+                    if (unit) {
+                      tooltipText += ` — ${unit.unitType === 'army' ? 'Army' : 'Fleet'} (${unit.power})`;
+                    }
+                    if (owner) {
+                      tooltipText += province.supplyCenter
+                        ? ` [SC: ${owner}]`
+                        : ` [Owned by ${owner}]`;
+                    } else if (province.supplyCenter) {
+                      tooltipText += ' [SC: neutral]';
+                    }
+
+                    return (
+                      <g pointerEvents="none">
+                        <rect
+                          x={center.x - 86}
+                          y={center.y - 32}
+                          width={172}
+                          height={24}
+                          rx={4}
+                          fill="#111827"
+                          fillOpacity={0.92}
+                        />
+                        <text
+                          x={center.x}
+                          y={center.y - 17}
+                          textAnchor="middle"
+                          fill="#fff"
+                          fontSize={10}
+                          fontFamily="system-ui, sans-serif"
+                        >
+                          {tooltipText}
+                        </text>
+                      </g>
+                    );
+                  })()}
               </svg>
             </TransformComponent>
 
             <div className="pointer-events-none absolute right-4 top-4 z-10 flex gap-2">
-              <div className="pointer-events-auto flex gap-2 rounded-full border border-black/10 bg-white/85 p-1 shadow-lg backdrop-blur">
+              <div
+                className={
+                  hideControls
+                    ? 'pointer-events-none opacity-0'
+                    : 'pointer-events-auto flex gap-2 rounded-full border border-black/10 bg-white/85 p-1 shadow-lg backdrop-blur transition-opacity'
+                }
+              >
                 <Button
                   type="button"
                   variant="outline"

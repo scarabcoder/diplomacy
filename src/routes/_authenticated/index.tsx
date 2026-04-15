@@ -1,27 +1,57 @@
-import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
-  useSuspenseQuery,
   useMutation,
   useQueryClient,
+  useSuspenseQuery,
 } from '@tanstack/react-query';
-import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import {
+  ArrowRight,
+  DoorOpen,
+  LogOut,
+  Plus,
+  ScrollText,
+  Sword,
+  Users,
+} from 'lucide-react';
+import {
+  CommandPanel,
+  InviteCode,
+  ParchmentPanel,
+  SectionKicker,
+  StatusSeal,
+  WarRoomStage,
+} from '@/components/surfaces/war-room.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
-import { Label } from '@/components/ui/label.tsx';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card.tsx';
 import { authClient } from '@/domain/auth/client.ts';
+import type { Power } from '@/domain/game/engine/types.ts';
+import { PowerName } from '@/domain/game/power-presentation.tsx';
 import { orpcUtils } from '@/rpc/react.ts';
+
+type RoomStatus = 'lobby' | 'playing' | 'completed' | 'abandoned';
+
+const roomStatusOrder: Record<RoomStatus, number> = {
+  playing: 0,
+  lobby: 1,
+  completed: 2,
+  abandoned: 3,
+};
+
+const roomStatusMeta = {
+  playing: { label: 'In progress', tone: 'danger' as const },
+  lobby: { label: 'Lobby', tone: 'warning' as const },
+  completed: { label: 'Completed', tone: 'success' as const },
+  abandoned: { label: 'Abandoned', tone: 'neutral' as const },
+};
 
 export const Route = createFileRoute('/_authenticated/')({
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(
-      orpcUtils.room.listMyRooms.queryOptions({ input: { limit: 20, offset: 0 } }),
+      orpcUtils.room.listMyRooms.queryOptions({
+        input: { limit: 20, offset: 0 },
+      }),
     );
   },
   component: HomePage,
@@ -34,7 +64,9 @@ function HomePage() {
     orpcUtils.auth.getUserSession.queryOptions(),
   );
   const { data: rooms } = useSuspenseQuery(
-    orpcUtils.room.listMyRooms.queryOptions({ input: { limit: 20, offset: 0 } }),
+    orpcUtils.room.listMyRooms.queryOptions({
+      input: { limit: 20, offset: 0 },
+    }),
   );
 
   const [roomName, setRoomName] = useState('');
@@ -46,6 +78,35 @@ function HomePage() {
   const joinRoomMutation = useMutation(
     orpcUtils.room.joinRoom.mutationOptions(),
   );
+
+  const sortedRooms = useMemo(
+    () =>
+      [...rooms].sort((left, right) => {
+        const statusDelta =
+          roomStatusOrder[left.status as RoomStatus] -
+          roomStatusOrder[right.status as RoomStatus];
+        if (statusDelta !== 0) return statusDelta;
+        return (
+          new Date(right.updatedAt).getTime() -
+          new Date(left.updatedAt).getTime()
+        );
+      }),
+    [rooms],
+  );
+
+  const groupedRooms = useMemo(
+    () => ({
+      playing: sortedRooms.filter((room) => room.status === 'playing'),
+      lobby: sortedRooms.filter((room) => room.status === 'lobby'),
+      closed: sortedRooms.filter(
+        (room) => room.status === 'completed' || room.status === 'abandoned',
+      ),
+    }),
+    [sortedRooms],
+  );
+  const roomHeading = session?.user.name
+    ? `${session.user.name}'s rooms`
+    : 'Your rooms';
 
   const handleCreateRoom = async () => {
     if (!roomName.trim()) return;
@@ -73,126 +134,319 @@ function HomePage() {
   };
 
   return (
-    <div className="min-h-screen p-8 max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Diplomacy</h1>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
-          Sign out
-        </Button>
-      </div>
-
-      <p className="text-muted-foreground mb-8">
-        Welcome, {session?.user.name || 'Player'}
-      </p>
-
-      <div className="grid gap-6 md:grid-cols-2 mb-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create Room</CardTitle>
-            <CardDescription>Start a new game</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-3">
-              <div>
-                <Label htmlFor="room-name">Room Name</Label>
-                <Input
-                  id="room-name"
-                  value={roomName}
-                  onChange={(e) => setRoomName(e.target.value)}
-                  placeholder="My Diplomacy Game"
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
-                />
+    <WarRoomStage>
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
+        <ParchmentPanel className="px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-3">
+              <SectionKicker>Rooms</SectionKicker>
+              <div className="space-y-2">
+                <h1 className="font-display text-4xl text-foreground sm:text-5xl">
+                  {roomHeading}
+                </h1>
+                <p className="max-w-[52rem] text-base leading-7 text-muted-foreground sm:text-lg">
+                  Create a room, join by code, or reopen one you already belong
+                  to.
+                </p>
               </div>
-              <Button
-                onClick={handleCreateRoom}
-                disabled={!roomName.trim() || createRoomMutation.isPending}
-              >
-                {createRoomMutation.isPending ? 'Creating...' : 'Create'}
-              </Button>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Join Room</CardTitle>
-            <CardDescription>Enter a 6-character code</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-3">
-              <div>
-                <Label htmlFor="join-code">Room Code</Label>
-                <Input
-                  id="join-code"
-                  value={joinCode}
-                  onChange={(e) =>
-                    setJoinCode(e.target.value.toUpperCase().slice(0, 6))
-                  }
-                  placeholder="ABC123"
-                  maxLength={6}
-                  className="font-mono tracking-widest text-center text-lg"
-                  onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
-                />
+            <Button
+              className="h-11 self-start rounded-full border border-black/10 bg-white/70 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white sm:self-auto"
+              onClick={handleLogout}
+              variant="outline"
+            >
+              <LogOut className="size-4" />
+              Sign out
+            </Button>
+          </div>
+        </ParchmentPanel>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)]">
+          <CommandPanel className="overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <SectionKicker className="text-[oklch(0.84_0.04_80)] before:bg-[color:color-mix(in_oklab,var(--accent-brass)_72%,white_28%)]">
+                  Create Room
+                </SectionKicker>
+                <h2 className="font-display text-3xl text-white sm:text-[2.4rem]">
+                  Start a new room.
+                </h2>
+                <p className="max-w-[42rem] text-base leading-7 text-white/72">
+                  Create a private room for your group, then assign powers once
+                  everyone has joined.
+                </p>
               </div>
-              <Button
-                onClick={handleJoinRoom}
-                disabled={joinCode.length !== 6 || joinRoomMutation.isPending}
+
+              <form
+                className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleCreateRoom();
+                }}
               >
-                {joinRoomMutation.isPending ? 'Joining...' : 'Join'}
-              </Button>
-              {joinRoomMutation.isError && (
-                <p className="text-sm text-destructive">
+                <Input
+                  className="h-13 rounded-[1.15rem] border-white/12 bg-white/10 px-4 text-base text-white placeholder:text-white/50 focus-visible:ring-[3px] focus-visible:ring-[color:color-mix(in_oklab,var(--accent-brass)_54%,transparent)] focus-visible:ring-offset-0"
+                  id="room-name"
+                  onChange={(event) => setRoomName(event.target.value)}
+                  placeholder="The Vienna Settlement"
+                  value={roomName}
+                />
+                <Button
+                  className="h-13 rounded-full px-5 text-sm font-bold uppercase tracking-[0.14em]"
+                  disabled={!roomName.trim() || createRoomMutation.isPending}
+                  type="submit"
+                >
+                  <Plus className="size-4" />
+                  {createRoomMutation.isPending ? 'Creating...' : 'Create room'}
+                </Button>
+              </form>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <CommandStat label="Visibility" value="Private room" />
+                <CommandStat label="Entry" value="Join by code" />
+                <CommandStat label="Next" value="Choose powers" />
+              </div>
+            </div>
+          </CommandPanel>
+
+          <ParchmentPanel className="px-5 py-5 sm:px-6 sm:py-6">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <SectionKicker>Join Room</SectionKicker>
+                <h2 className="font-display text-2xl text-foreground">
+                  Join an existing room.
+                </h2>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Enter the six-character room code exactly as shared by the
+                  host.
+                </p>
+              </div>
+
+              <form
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleJoinRoom();
+                }}
+              >
+                <label className="block space-y-2" htmlFor="join-code">
+                  <span className="text-sm font-bold uppercase tracking-[0.14em] text-[color:var(--accent-navy)]">
+                    Room code
+                  </span>
+                  <Input
+                    className="h-14 rounded-[1.25rem] border-[color:color-mix(in_oklab,var(--accent-navy)_18%,var(--border)_82%)] bg-[color:color-mix(in_oklab,var(--paper)_82%,white_18%)] px-4 text-center font-mono text-2xl tracking-[0.36em] text-foreground placeholder:tracking-[0.3em] focus-visible:ring-[3px] focus-visible:ring-[color:color-mix(in_oklab,var(--accent-brass)_58%,transparent)] focus-visible:ring-offset-0"
+                    id="join-code"
+                    maxLength={6}
+                    onChange={(event) =>
+                      setJoinCode(event.target.value.toUpperCase().slice(0, 6))
+                    }
+                    placeholder="ABC123"
+                    value={joinCode}
+                  />
+                </label>
+
+                <Button
+                  className="h-12 w-full rounded-full text-sm font-bold uppercase tracking-[0.14em]"
+                  disabled={joinCode.length !== 6 || joinRoomMutation.isPending}
+                  type="submit"
+                >
+                  <DoorOpen className="size-4" />
+                  {joinRoomMutation.isPending ? 'Joining...' : 'Join room'}
+                </Button>
+              </form>
+
+              {joinRoomMutation.isError ? (
+                <p className="rounded-[1rem] bg-[oklch(0.92_0.04_28)] px-4 py-3 text-sm text-destructive">
                   {joinRoomMutation.error.message}
                 </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              ) : null}
 
-      {rooms && rooms.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Your Rooms</h2>
-          <div className="flex flex-col gap-3">
-            {rooms.map((room) => (
-              <Link
-                key={room.id}
-                to="/rooms/$roomId"
-                params={{ roomId: room.id }}
-                className="block"
-              >
-                <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div>
-                      <p className="font-medium">{room.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Code: {room.code} &middot;{' '}
-                        {room.myPlayer.isSpectator
-                          ? 'Spectator'
-                          : room.myPlayer.power
-                            ? room.myPlayer.power.charAt(0).toUpperCase() +
-                              room.myPlayer.power.slice(1)
-                            : 'No power selected'}
-                      </p>
-                    </div>
-                    <span
-                      className={`text-xs font-medium px-2 py-1 rounded ${
-                        room.status === 'lobby'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : room.status === 'playing'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {room.status}
-                    </span>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+              <div className="rounded-[1.2rem] bg-[color:color-mix(in_oklab,var(--paper-strong)_70%,white_30%)] px-4 py-4 text-sm leading-6 text-muted-foreground">
+                Rooms entered by code open directly to the lobby or current
+                board, depending on room state.
+              </div>
+            </div>
+          </ParchmentPanel>
+        </div>
+
+        {sortedRooms.length === 0 ? (
+          <ParchmentPanel className="px-6 py-8 text-center sm:px-10">
+            <div className="mx-auto max-w-2xl space-y-4">
+              <div className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--accent-brass)_28%,white_72%)] text-[color:var(--accent-oxblood)]">
+                <ScrollText className="size-7" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="font-display text-3xl text-foreground">
+                  No rooms yet.
+                </h2>
+                <p className="text-base leading-7 text-muted-foreground">
+                  Create a room above or join one by code. Your rooms appear
+                  here grouped by status.
+                </p>
+              </div>
+            </div>
+          </ParchmentPanel>
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="space-y-6">
+              <RoomListSection
+                emptyCopy="No active rooms need attention right now."
+                icon={<Sword className="size-4" />}
+                rooms={groupedRooms.playing}
+                title="In progress"
+              />
+              <RoomListSection
+                emptyCopy="No open lobbies at the moment."
+                icon={<Users className="size-4" />}
+                rooms={groupedRooms.lobby}
+                title="Open lobbies"
+              />
+            </div>
+            <RoomListSection
+              emptyCopy="Completed or abandoned rooms appear here."
+              icon={<ScrollText className="size-4" />}
+              rooms={groupedRooms.closed}
+              title="Closed rooms"
+            />
+          </div>
+        )}
+      </div>
+    </WarRoomStage>
+  );
+}
+
+function RoomListSection({
+  title,
+  icon,
+  rooms,
+  emptyCopy,
+}: Readonly<{
+  title: string;
+  icon: ReactNode;
+  rooms: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: RoomStatus;
+    updatedAt: Date | string;
+    myPlayer: { role: string; isSpectator: boolean; power: Power | null };
+  }>;
+  emptyCopy: string;
+}>) {
+  return (
+    <ParchmentPanel className="px-5 py-5 sm:px-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-9 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--accent-brass)_28%,white_72%)] text-[color:var(--accent-oxblood)]">
+              {icon}
+            </span>
+            <div>
+              <h2 className="font-display text-2xl text-foreground">{title}</h2>
+              <p className="text-sm text-muted-foreground">
+                {rooms.length} room{rooms.length === 1 ? '' : 's'}
+              </p>
+            </div>
           </div>
         </div>
-      )}
+
+        {rooms.length === 0 ? (
+          <div className="rounded-[1.3rem] bg-[color:color-mix(in_oklab,var(--paper-strong)_70%,white_30%)] px-4 py-5 text-sm leading-6 text-muted-foreground">
+            {emptyCopy}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rooms.map((room) => (
+              <HomeRoomCard key={room.id} room={room} />
+            ))}
+          </div>
+        )}
+      </div>
+    </ParchmentPanel>
+  );
+}
+
+function HomeRoomCard({
+  room,
+}: Readonly<{
+  room: {
+    id: string;
+    code: string;
+    name: string;
+    status: RoomStatus;
+    updatedAt: Date | string;
+    myPlayer: { role: string; isSpectator: boolean; power: Power | null };
+  };
+}>) {
+  const meta = roomStatusMeta[room.status];
+  const membershipItems: ReactNode[] = [
+    room.myPlayer.role === 'creator' ? 'Creator' : null,
+    room.myPlayer.isSpectator ? (
+      'Spectator'
+    ) : room.myPlayer.power ? (
+      <PowerName
+        className="gap-1.5"
+        flagClassName="h-3 w-4.5"
+        key="membership-power"
+        power={room.myPlayer.power}
+      />
+    ) : (
+      'Seat not chosen'
+    ),
+  ].filter((item) => item != null) as ReactNode[];
+
+  return (
+    <Link
+      className="group block rounded-[1.35rem] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
+      params={{ roomId: room.id }}
+      to="/rooms/$roomId"
+    >
+      <div className="rounded-[1.35rem] border border-black/10 bg-white/58 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] transition duration-200 ease-out group-hover:-translate-y-0.5 group-hover:bg-white/72">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-display text-xl text-foreground">
+                {room.name}
+              </h3>
+              <StatusSeal tone={meta.tone}>{meta.label}</StatusSeal>
+            </div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {membershipItems.map((item, index) => (
+                <Fragment key={`membership-${index}`}>
+                  {index > 0 ? <span aria-hidden="true"> · </span> : null}
+                  {item}
+                </Fragment>
+              ))}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
+            <InviteCode code={room.code} className="px-4 py-2 text-[0.7rem]" />
+            <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--accent-navy)]">
+              Open room
+              <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" />
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function CommandStat({
+  label,
+  value,
+}: Readonly<{
+  label: string;
+  value: string;
+}>) {
+  return (
+    <div className="rounded-[1.2rem] border border-white/12 bg-white/8 px-4 py-4">
+      <div className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-white/54">
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-semibold text-white">{value}</div>
     </div>
   );
 }

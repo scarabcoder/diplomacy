@@ -18,7 +18,16 @@ describe('order drafting helpers', () => {
     };
 
     expect(getConvoyMoveTargets('lon', positions)).toEqual(
-      expect.arrayContaining(['bel', 'bre', 'den', 'hol', 'nwy', 'pic', 'wal', 'yor']),
+      expect.arrayContaining([
+        'bel',
+        'bre',
+        'den',
+        'hol',
+        'nwy',
+        'pic',
+        'wal',
+        'yor',
+      ]),
     );
     expect(getCoastalDestinationsForFleetArmy('eng', 'lon', positions)).toEqual(
       expect.arrayContaining(['bel', 'bre', 'pic', 'wal']),

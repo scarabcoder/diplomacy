@@ -7,10 +7,14 @@ import { FormFieldErrors } from './form-field-errors';
 
 type FormInputProps = {
   label?: string;
+  inputClassName?: string;
 } & React.ComponentProps<'input'>;
 
 export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
-  ({ label, type = 'text', className, maxLength, ...props }, ref) => {
+  (
+    { label, type = 'text', className, inputClassName, maxLength, ...props },
+    ref,
+  ) => {
     const field = useFieldContext<string | number | null>();
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,6 +35,7 @@ export const FormInput = React.forwardRef<HTMLInputElement, FormInputProps>(
         )}
         <Input
           {...props}
+          className={inputClassName}
           ref={ref}
           name={field.name}
           id={field.name}

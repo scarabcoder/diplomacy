@@ -3,9 +3,9 @@ import {
   PROVINCES,
   getArmyMoves,
   getFleetMoves,
-  getBaseProvince,
   isMultiCoast,
 } from './map-data.ts';
+import { getBaseProvince } from '../lib/province-refs.ts';
 
 export interface ValidationResult {
   valid: boolean;
@@ -74,7 +74,10 @@ function validateMove(
   const target = getBaseProvince(order.targetProvince);
   const targetProvince = PROVINCES[target];
   if (!targetProvince) {
-    return { valid: false, reason: `Unknown province: ${order.targetProvince}` };
+    return {
+      valid: false,
+      reason: `Unknown province: ${order.targetProvince}`,
+    };
   }
 
   if (order.unitType === 'army') {
@@ -111,9 +114,7 @@ function validateMove(
 
     // Check fleet adjacency
     const destinations = getFleetMoves(order.unitProvince, unitCoast);
-    const isAdj = destinations.some(
-      (d) => getBaseProvince(d) === target,
-    );
+    const isAdj = destinations.some((d) => getBaseProvince(d) === target);
     if (!isAdj) {
       return {
         valid: false,

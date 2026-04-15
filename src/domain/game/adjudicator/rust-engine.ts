@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import type {
   BuildOrder,
   BuildResult,
@@ -6,18 +5,26 @@ import type {
   Order,
   ResolutionResult,
   RetreatOrder,
+  RetreatOrderResult,
   RetreatResult,
   SupplyCenterOwnership,
   UnitPositions,
 } from '@/domain/game/engine/types.ts';
-
-const require = createRequire(import.meta.url);
+import { getBaseProvince } from '@/domain/game/lib/province-refs.ts';
 
 type WasmModule = {
   validateMainOrders(input: unknown): unknown;
   adjudicateMainPhase(input: unknown): unknown;
   adjudicateRetreatPhase(input: unknown): unknown;
   adjudicateBuildPhase(input: unknown): unknown;
+};
+
+type WasmGlueModule = WasmModule & {
+  __wbg_set_wasm(exports: WebAssembly.Exports): void;
+};
+
+type WasmInstanceExports = WebAssembly.Exports & {
+  __wbindgen_start(): void;
 };
 
 type ValidationError = {
@@ -36,22 +43,26 @@ type BuildResolution = BuildResult & {
 
 let modulePromise: Promise<WasmModule> | null = null;
 
-function coerceModule(mod: unknown): WasmModule {
-  const candidate =
-    mod && typeof mod === 'object' && 'validateMainOrders' in mod
-      ? mod
-      : (mod as { default?: unknown }).default;
-
-  return candidate as WasmModule;
-}
-
 async function loadModule(): Promise<WasmModule> {
   if (!modulePromise) {
-    modulePromise = Promise.resolve().then(() =>
-      coerceModule(
-        require('../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm.js'),
-      ),
-    );
+    modulePromise = (async () => {
+      const glueModule =
+        (await import('../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.js')) as WasmGlueModule;
+      const wasmUrl = new URL(
+        '../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.wasm',
+        import.meta.url,
+      );
+      const wasmBytes = await Bun.file(wasmUrl).arrayBuffer();
+      const { instance } = await WebAssembly.instantiate(wasmBytes, {
+        './diplomacy_wasm_bg.js': glueModule,
+      });
+      const exports = instance.exports as WasmInstanceExports;
+
+      glueModule.__wbg_set_wasm(exports);
+      exports.__wbindgen_start();
+
+      return glueModule;
+    })();
   }
 
   return modulePromise;
@@ -80,7 +91,9 @@ function normalizeOrders(orders: Order[]): Order[] {
   }));
 }
 
-function normalizeDislodgedUnits(dislodgedUnits: DislodgedUnit[]): DislodgedUnit[] {
+function normalizeDislodgedUnits(
+  dislodgedUnits: DislodgedUnit[],
+): DislodgedUnit[] {
   return dislodgedUnits.map((unit) => ({
     ...unit,
     coast: unit.coast ?? null,
@@ -100,6 +113,93 @@ function normalizeBuilds(builds: BuildOrder[]): BuildOrder[] {
     unitType: build.unitType ?? null,
     coast: build.coast ?? null,
   }));
+}
+
+function deriveRetreatOrderResults(
+  currentPositions: UnitPositions,
+  dislodgedUnits: DislodgedUnit[],
+  retreats: RetreatOrder[],
+  result: Omit<RetreatResult, 'orderResults'>,
+): RetreatOrderResult[] {
+  const disbandedProvinces = new Set(
+    result.disbandedUnits.map((unit) => unit.province),
+  );
+  const retreatTargetCounts = new Map<string, number>();
+
+  for (const retreat of retreats) {
+    if (retreat.retreatTo) {
+      retreatTargetCounts.set(
+        retreat.retreatTo,
+        (retreatTargetCounts.get(retreat.retreatTo) ?? 0) + 1,
+      );
+    }
+  }
+
+  return retreats.map((retreat) => {
+    if (!retreat.retreatTo) {
+      return {
+        order: retreat,
+        success: false,
+        resultType: 'disbanded',
+        reason: 'Disbanded',
+      };
+    }
+
+    const dislodged = dislodgedUnits.find(
+      (unit) => unit.province === retreat.unitProvince,
+    );
+    if (!dislodged) {
+      return {
+        order: retreat,
+        success: false,
+        resultType: 'failed',
+        reason: 'No dislodged unit found for retreat',
+      };
+    }
+
+    if (!disbandedProvinces.has(retreat.unitProvince)) {
+      return {
+        order: retreat,
+        success: true,
+        resultType: 'retreated',
+        reason: null,
+      };
+    }
+
+    if (retreatTargetCounts.get(retreat.retreatTo)! > 1) {
+      return {
+        order: retreat,
+        success: false,
+        resultType: 'failed',
+        reason: 'Rejected: conflicting retreats to the same province',
+      };
+    }
+
+    if (!dislodged.retreatOptions.includes(retreat.retreatTo)) {
+      return {
+        order: retreat,
+        success: false,
+        resultType: 'failed',
+        reason: 'Rejected: invalid retreat destination',
+      };
+    }
+
+    if (currentPositions[getBaseProvince(retreat.retreatTo)]) {
+      return {
+        order: retreat,
+        success: false,
+        resultType: 'failed',
+        reason: 'Rejected: destination is occupied',
+      };
+    }
+
+    return {
+      order: retreat,
+      success: false,
+      resultType: 'failed',
+      reason: 'Rejected: retreat failed during adjudication',
+    };
+  });
 }
 
 export async function validateMainOrders(
@@ -130,11 +230,21 @@ export async function adjudicateRetreatPhase(
   retreats: RetreatOrder[],
 ): Promise<RetreatResult> {
   const wasm = await loadModule();
-  return wasm.adjudicateRetreatPhase({
+  const result = wasm.adjudicateRetreatPhase({
     currentPositions: normalizePositions(currentPositions),
     dislodgedUnits: normalizeDislodgedUnits(dislodgedUnits),
     retreats: normalizeRetreats(retreats),
-  }) as RetreatResult;
+  }) as Omit<RetreatResult, 'orderResults'>;
+
+  return {
+    ...result,
+    orderResults: deriveRetreatOrderResults(
+      currentPositions,
+      dislodgedUnits,
+      retreats,
+      result,
+    ),
+  };
 }
 
 export async function adjudicateBuildPhase(

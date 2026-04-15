@@ -22,7 +22,9 @@ async function safeReadBody(request: Request): Promise<string | null> {
   }
 }
 
-async function safeReadResponseBody(response: Response): Promise<string | null> {
+async function safeReadResponseBody(
+  response: Response,
+): Promise<string | null> {
   try {
     const text = await response.clone().text();
     return text ? truncate(text) : null;

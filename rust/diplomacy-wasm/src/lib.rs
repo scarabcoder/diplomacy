@@ -1,4 +1,5 @@
-use diplomacy::geo::{ProvinceKey, RegionKey, standard_map};
+use diplomacy::geo::builder::ProvinceRegistry;
+use diplomacy::geo::{Coast, Map, Province, ProvinceKey, RegionKey, SupplyCenter, Terrain};
 use diplomacy::judge::build::{Submission as BuildSubmission, WorldState};
 use diplomacy::judge::retreat::{Context as RetreatContext, DestStatus, Start as RetreatStart};
 use diplomacy::judge::{
@@ -9,6 +10,7 @@ use diplomacy::{Nation, ShortName, Unit, UnitPosition, UnitPositions, UnitType};
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::OnceLock;
 use wasm_bindgen::prelude::*;
 
 type WasmResult<T> = Result<T, JsValue>;
@@ -171,6 +173,98 @@ struct BuildPhaseOutput {
     failed: Vec<FailedBuild>,
 }
 
+fn world_map() -> &'static Map {
+    static WORLD_MAP: OnceLock<Map> = OnceLock::new();
+    WORLD_MAP.get_or_init(load_world_map)
+}
+
+fn load_world_map() -> Map {
+    let mut prov_reg = ProvinceRegistry::default();
+    for line in include_str!("standard_map/provinces.csv").lines().skip(1) {
+        if let Ok(province) = province_from_line(line) {
+            prov_reg
+                .register(province)
+                .expect("local standard map province should register");
+        } else {
+            panic!("Failed registering province: {line}");
+        }
+    }
+
+    let mut region_reg = prov_reg.finish();
+    for line in include_str!("standard_map/regions.csv").lines().skip(1) {
+        if let Ok((province, coast, terrain)) = region_from_line(line) {
+            region_reg
+                .register(province, coast, terrain)
+                .expect("local standard map region should register");
+        } else {
+            panic!("Failed registering region: {line}");
+        }
+    }
+
+    let mut border_reg = region_reg.finish();
+    for line in include_str!("standard_map/borders.csv").lines().skip(1) {
+        let words = line.split(',').collect::<Vec<_>>();
+        border_reg
+            .register(words[0], words[1], terrain_from_word(words[2]).unwrap())
+            .expect("local standard map border should register");
+    }
+
+    border_reg.finish()
+}
+
+fn province_from_line(s: &str) -> Result<Province, ()> {
+    let words = s.split(',').collect::<Vec<_>>();
+    if words.len() == 3 {
+        Ok(Province {
+            short_name: String::from(words[0]),
+            supply_center: supply_center_from_word(words[2]),
+        })
+    } else {
+        Err(())
+    }
+}
+
+fn supply_center_from_word(s: &str) -> SupplyCenter {
+    match s {
+        "" => SupplyCenter::None,
+        "neutral" => SupplyCenter::Neutral,
+        nation => SupplyCenter::Home(nation.into()),
+    }
+}
+
+fn region_from_line(s: &str) -> Result<(&str, Option<Coast>, Terrain), ()> {
+    let words = s.split(',').collect::<Vec<_>>();
+    if words.len() == 3 {
+        Ok((
+            words[0],
+            coast_from_word(words[1])?,
+            terrain_from_word(words[2])?,
+        ))
+    } else {
+        Err(())
+    }
+}
+
+fn coast_from_word(s: &str) -> Result<Option<Coast>, ()> {
+    match s {
+        "" => Ok(None),
+        "n" => Ok(Some(Coast::North)),
+        "e" => Ok(Some(Coast::East)),
+        "s" => Ok(Some(Coast::South)),
+        "w" => Ok(Some(Coast::West)),
+        _ => Err(()),
+    }
+}
+
+fn terrain_from_word(s: &str) -> Result<Terrain, ()> {
+    match s {
+        "sea" => Ok(Terrain::Sea),
+        "coast" => Ok(Terrain::Coast),
+        "land" => Ok(Terrain::Land),
+        _ => Err(()),
+    }
+}
+
 #[wasm_bindgen(js_name = validateMainOrders)]
 pub fn validate_main_orders(input: JsValue) -> WasmResult<JsValue> {
     let input: ValidateMainOrdersInput = from_js(input)?;
@@ -181,7 +275,7 @@ pub fn validate_main_orders(input: JsValue) -> WasmResult<JsValue> {
         .map(|order| map_app_order(order, &world))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let submission = Submission::new(standard_map(), &world, orders.clone());
+    let submission = Submission::new(world_map(), &world, orders.clone());
     let outcome = submission.adjudicate(Rulebook::edition_2023());
     let errors = submission
         .submitted_orders()
@@ -211,7 +305,7 @@ pub fn adjudicate_main_phase(input: JsValue) -> WasmResult<JsValue> {
         .map(|order| map_app_order(order, &world))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let submission = Submission::new(standard_map(), &world, orders.clone());
+    let submission = Submission::new(world_map(), &world, orders.clone());
     let outcome = submission.adjudicate(Rulebook::edition_2023());
     let retreat_start = outcome.to_retreat_start();
 
@@ -384,7 +478,7 @@ pub fn adjudicate_build_phase(input: JsValue) -> WasmResult<JsValue> {
         .collect::<Result<Vec<_>, _>>()?;
 
     let build_submission =
-        BuildSubmission::new(standard_map(), world.last_time(), &world, mapped_builds.clone());
+        BuildSubmission::new(world_map(), world.last_time(), &world, mapped_builds.clone());
     let outcome = build_submission.adjudicate(Rulebook::edition_2023());
 
     let new_positions = positions_from_unit_positions(outcome.to_final_unit_positions());
@@ -499,6 +593,7 @@ fn app_province_to_rust(province: &str) -> String {
         "gol" => String::from("lyo"),
         "mid" => String::from("mao"),
         "nat" => String::from("nao"),
+        "nrg" => String::from("nwg"),
         "tyn" => String::from("tys"),
         other => String::from(other),
     }
@@ -509,6 +604,7 @@ fn rust_province_to_app(province: &str) -> String {
         "lyo" => String::from("gol"),
         "mao" => String::from("mid"),
         "nao" => String::from("nat"),
+        "nwg" => String::from("nrg"),
         "tys" => String::from("tyn"),
         other => String::from(other),
     }
@@ -565,7 +661,7 @@ fn parse_destination_region(
     }
 
     if unit_type == UnitType::Fleet {
-        let bordering = standard_map()
+        let bordering = world_map()
             .find_bordering(&from_region)
             .into_iter()
             .filter(|region| region.province() == &ProvinceKey::from(province.clone()))

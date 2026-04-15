@@ -17,6 +17,10 @@ import {
   countSupplyCenters,
 } from '@/domain/game/engine/map-data.ts';
 import { calculateBuildCounts } from '@/domain/game/engine/resolve-builds.ts';
+import {
+  archiveConversationsForCompletedRoom,
+  archiveConversationsForEliminatedPlayers,
+} from '@/domain/message/archive.ts';
 
 const VICTORY_THRESHOLD = 18;
 
@@ -253,6 +257,11 @@ async function createNextTurn(
     .update(gameRoomTable)
     .set({ currentTurnId: turn!.id, updatedAt: new Date() })
     .where(eq(gameRoomTable.id, roomId));
+
+  // Notify bots of the new submission phase
+  import('@/domain/bot/brain/bot-triggers.ts').then(({ onPhaseChanged }) => {
+    onPhaseChanged(roomId, 'order_submission');
+  });
 }
 
 async function createNextPhase(
@@ -297,6 +306,11 @@ async function createNextPhase(
     .update(gameRoomTable)
     .set({ currentTurnId: turn!.id, updatedAt: new Date() })
     .where(eq(gameRoomTable.id, roomId));
+
+  // Notify bots of the new submission phase
+  import('@/domain/bot/brain/bot-triggers.ts').then(({ onPhaseChanged }) => {
+    onPhaseChanged(roomId, phase);
+  });
 }
 
 async function updatePlayerSupplyCounts(
@@ -309,9 +323,13 @@ async function updatePlayerSupplyCounts(
     .from(gamePlayerTable)
     .where(eq(gamePlayerTable.roomId, roomId));
 
+  const eliminatedPlayerIds: string[] = [];
+
   for (const player of players) {
     if (player.power && !player.isSpectator) {
       const count = counts[player.power] ?? 0;
+      const shouldEliminate = count === 0 && player.status !== 'eliminated';
+
       await database
         .update(gamePlayerTable)
         .set({
@@ -319,8 +337,14 @@ async function updatePlayerSupplyCounts(
           status: count === 0 ? 'eliminated' : player.status,
         })
         .where(eq(gamePlayerTable.id, player.id));
+
+      if (shouldEliminate) {
+        eliminatedPlayerIds.push(player.id);
+      }
     }
   }
+
+  await archiveConversationsForEliminatedPlayers(roomId, eliminatedPlayerIds);
 }
 
 async function endGame(roomId: string, winnerPower: Power): Promise<void> {
@@ -335,8 +359,10 @@ async function endGame(roomId: string, winnerPower: Power): Promise<void> {
     .update(gameRoomTable)
     .set({
       status: 'completed',
-      winnerId: winnerPlayer?.userId ?? null,
+      winnerPlayerId: winnerPlayer?.id ?? null,
       updatedAt: new Date(),
     })
     .where(eq(gameRoomTable.id, roomId));
+
+  await archiveConversationsForCompletedRoom(roomId);
 }

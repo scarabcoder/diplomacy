@@ -1,5 +1,10 @@
 import { ORPCError } from '@orpc/client';
 import { and, eq } from 'drizzle-orm';
+import {
+  requireRoomMembershipForActor,
+  requireRpcActor,
+  type RpcActor,
+} from '@/domain/player-actor.ts';
 import { authed } from '@/rpc/base.ts';
 import { database } from '@/database/database.ts';
 import {
@@ -7,6 +12,7 @@ import {
   gameTurnTable,
   gameOrderTable,
   gameOrderResultTable,
+  gamePhaseResultTable,
   gamePlayerTable,
   gameRetreatTable,
   gameBuildTable,
@@ -30,19 +36,23 @@ import {
 } from '@/domain/game/adjudicator/rust-engine.ts';
 import { advancePhase } from '@/domain/game/game-logic.ts';
 import {
+  buildBuildPhaseResultPayload,
+  buildOrderPhaseResultPayload,
+  buildRetreatPhaseResultPayload,
+  type GamePhaseResultPayload,
+} from '@/domain/game/phase-results.ts';
+import {
   submitOrdersSchema,
   submitRetreatsSchema,
   submitBuildsSchema,
   getMyOrdersSchema,
 } from './schema.ts';
+import { publishRoomEvent } from '@/domain/room/realtime.ts';
 
 // --- Helper: get room, turn, and player context ---
-async function getGameContext(roomId: string, userId: string) {
+async function getGameContext(roomId: string, actor: RpcActor) {
   const room = await selectOne(
-    database
-      .select()
-      .from(gameRoomTable)
-      .where(eq(gameRoomTable.id, roomId)),
+    database.select().from(gameRoomTable).where(eq(gameRoomTable.id, roomId)),
   );
   if (!room || room.status !== 'playing') {
     throw new ORPCError('BAD_REQUEST', { message: 'Game is not active' });
@@ -61,16 +71,10 @@ async function getGameContext(roomId: string, userId: string) {
     throw new ORPCError('BAD_REQUEST', { message: 'No active phase' });
   }
 
-  const player = await selectOne(
-    database
-      .select()
-      .from(gamePlayerTable)
-      .where(
-        and(
-          eq(gamePlayerTable.roomId, roomId),
-          eq(gamePlayerTable.userId, userId),
-        ),
-      ),
+  const player = await requireRoomMembershipForActor(
+    roomId,
+    actor,
+    'You are not an active player in this game',
   );
   if (!player || player.isSpectator || !player.power) {
     throw new ORPCError('FORBIDDEN', {
@@ -102,9 +106,8 @@ async function checkAllSubmitted(
       ),
     );
 
-  // Bots don't submit orders — exclude them from the check
   const activePowers = activePlayers
-    .filter((p) => p.power && p.status === 'active' && !p.isBot)
+    .filter((p) => p.power && p.status === 'active')
     .map((p) => p.power!);
 
   if (phase === 'order_submission') {
@@ -144,14 +147,34 @@ async function checkAllSubmitted(
   return false;
 }
 
+async function createPhaseResult(params: {
+  roomId: string;
+  turn: typeof gameTurnTable.$inferSelect;
+  payload: GamePhaseResultPayload;
+}) {
+  await database.insert(gamePhaseResultTable).values({
+    roomId: params.roomId,
+    turnId: params.turn.id,
+    turnNumber: params.turn.turnNumber,
+    year: params.turn.year,
+    season: params.turn.season,
+    phase: params.turn.phase,
+    payload: params.payload,
+  });
+}
+
+function getTurnDislodgedUnits(
+  turn: typeof gameTurnTable.$inferSelect,
+): DislodgedUnit[] {
+  return (turn.dislodgedUnits as DislodgedUnit[] | null) ?? [];
+}
+
 // --- Submit Orders ---
 export const submitOrders = authed
   .input(submitOrdersSchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const { room, turn, power } = await getGameContext(
-      input.roomId,
-      userSession.user.id,
-    );
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const { room, turn, power } = await getGameContext(input.roomId, actor);
 
     if (turn.phase !== 'order_submission') {
       throw new ORPCError('BAD_REQUEST', {
@@ -197,17 +220,17 @@ export const submitOrders = authed
     }
 
     const orderRecords = engineOrders.map((order) => ({
-        turnId: turn.id,
-        roomId: room.id,
-        power,
-        unitType: order.unitType,
-        unitProvince: order.unitProvince,
-        orderType: order.orderType,
-        targetProvince: order.targetProvince,
-        supportedUnitProvince: order.supportedUnitProvince,
-        viaConvoy: order.viaConvoy ?? false,
-        coast: order.coast,
-      }));
+      turnId: turn.id,
+      roomId: room.id,
+      power,
+      unitType: order.unitType,
+      unitProvince: order.unitProvince,
+      orderType: order.orderType,
+      targetProvince: order.targetProvince,
+      supportedUnitProvince: order.supportedUnitProvince,
+      viaConvoy: order.viaConvoy ?? false,
+      coast: order.coast,
+    }));
 
     await database.insert(gameOrderTable).values(orderRecords);
 
@@ -256,6 +279,27 @@ export const submitOrders = authed
         }
       }
 
+      await createPhaseResult({
+        roomId: room.id,
+        turn,
+        payload: buildOrderPhaseResultPayload({
+          turn: {
+            id: turn.id,
+            turnNumber: turn.turnNumber,
+            season: turn.season,
+            year: turn.year,
+            phase: turn.phase,
+            unitPositions: positions,
+            supplyCenters: turn.supplyCenters as SupplyCenterOwnership,
+            dislodgedUnits: getTurnDislodgedUnits(turn),
+          },
+          orders: allEngineOrders,
+          orderResults: result.orderResults,
+          resolvedPositions: result.newPositions,
+          dislodgedUnits: result.dislodgedUnits,
+        }),
+      });
+
       // Advance phase
       await advancePhase(
         room.id,
@@ -265,17 +309,16 @@ export const submitOrders = authed
       );
     }
 
+    publishRoomEvent(room.id, 'submit_orders');
     return { submitted: true, allSubmitted };
   });
 
 // --- Submit Retreats ---
 export const submitRetreats = authed
   .input(submitRetreatsSchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const { room, turn, power } = await getGameContext(
-      input.roomId,
-      userSession.user.id,
-    );
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const { room, turn, power } = await getGameContext(input.roomId, actor);
 
     if (turn.phase !== 'retreat_submission') {
       throw new ORPCError('BAD_REQUEST', {
@@ -283,7 +326,8 @@ export const submitRetreats = authed
       });
     }
 
-    const dislodgedUnits = (turn.dislodgedUnits as DislodgedUnit[] | null) ?? [];
+    const dislodgedUnits =
+      (turn.dislodgedUnits as DislodgedUnit[] | null) ?? [];
     const myDislodged = dislodgedUnits.filter((d) => d.power === power);
 
     if (myDislodged.length === 0) {
@@ -357,20 +401,38 @@ export const submitRetreats = authed
         retreatOrders,
       );
 
+      await createPhaseResult({
+        roomId: room.id,
+        turn,
+        payload: buildRetreatPhaseResultPayload({
+          turn: {
+            id: turn.id,
+            turnNumber: turn.turnNumber,
+            season: turn.season,
+            year: turn.year,
+            phase: turn.phase,
+            unitPositions: positions,
+            supplyCenters: turn.supplyCenters as SupplyCenterOwnership,
+            dislodgedUnits,
+          },
+          retreats: retreatOrders,
+          result,
+        }),
+      });
+
       await advancePhase(room.id, turn.id, result.newPositions, []);
     }
 
+    publishRoomEvent(room.id, 'submit_retreats');
     return { submitted: true, allSubmitted };
   });
 
 // --- Submit Builds ---
 export const submitBuilds = authed
   .input(submitBuildsSchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const { room, turn, power } = await getGameContext(
-      input.roomId,
-      userSession.user.id,
-    );
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const { room, turn, power } = await getGameContext(input.roomId, actor);
 
     if (turn.phase !== 'build_submission') {
       throw new ORPCError('BAD_REQUEST', {
@@ -453,20 +515,42 @@ export const submitBuilds = authed
         buildOrders,
       );
 
+      await createPhaseResult({
+        roomId: room.id,
+        turn,
+        payload: buildBuildPhaseResultPayload({
+          turn: {
+            id: turn.id,
+            turnNumber: turn.turnNumber,
+            season: turn.season,
+            year: turn.year,
+            phase: turn.phase,
+            unitPositions: positions,
+            supplyCenters,
+            dislodgedUnits: getTurnDislodgedUnits(turn),
+          },
+          builds: buildOrders,
+          result,
+        }),
+      });
+
       await advancePhase(room.id, turn.id, result.newPositions, []);
     }
 
+    publishRoomEvent(room.id, 'submit_builds');
     return { submitted: true, allSubmitted };
   });
 
 // --- Get My Orders ---
 export const getMyOrders = authed
   .input(getMyOrdersSchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const { room: _room, turn, power } = await getGameContext(
-      input.roomId,
-      userSession.user.id,
-    );
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const {
+      room: _room,
+      turn,
+      power,
+    } = await getGameContext(input.roomId, actor);
 
     const orders = await database
       .select()

@@ -84,7 +84,7 @@ Drizzle ORM -> PostgreSQL / PGlite
 bun run dev             # Dev server
 bun run build           # Production build
 bun run start           # Production server
-bun run type-check      # TypeScript checking
+bun run type-check      # TypeScript checking with tsgo (native preview)
 bun run lint            # Run oxlint
 bun run format          # Format with oxfmt
 bun run drizzle:migrate # Run migrations

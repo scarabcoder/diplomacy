@@ -36,7 +36,10 @@ function polygonPointsToPath(points: string): string {
     .join(' ')} Z`;
 }
 
-function parseViewBox(viewBox: string | null): { width: number; height: number } {
+function parseViewBox(viewBox: string | null): {
+  width: number;
+  height: number;
+} {
   const values = viewBox?.split(/\s+/).map(Number) ?? [];
   return {
     width: values[2] ?? 1524,
@@ -67,7 +70,7 @@ function loadClassicMap(): ClassicMapData {
     throw new Error('Classic Diplomacy SVG is missing the provinces layer');
   }
 
-  const provinces = [...provincesGroup.children]
+  const provinces = Array.from(provincesGroup.children)
     .map((element) => {
       const id = element.getAttribute('id');
       if (!id) {
@@ -110,7 +113,7 @@ function loadClassicMap(): ClassicMapData {
     '#province-centers > path, #supply-centers > path',
   );
 
-  for (const element of centerElements) {
+  for (const element of Array.from(centerElements)) {
     const id = element.getAttribute('id');
     if (!id) continue;
 

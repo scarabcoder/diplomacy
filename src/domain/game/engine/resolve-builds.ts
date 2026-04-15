@@ -29,9 +29,7 @@ export function calculateBuildCounts(
   return POWERS.map((power) => {
     const diff = scCounts[power] - unitCounts[power];
     const availableHomeSCs =
-      diff > 0
-        ? getAvailableHomeSCs(power, positions, supplyCenters)
-        : [];
+      diff > 0 ? getAvailableHomeSCs(power, positions, supplyCenters) : [];
 
     return {
       power,

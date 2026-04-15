@@ -2,6 +2,7 @@ import { ORPCError } from '@orpc/client';
 import { os } from '@orpc/server';
 import { serializeError } from 'serialize-error';
 import { auth } from '@/domain/auth/auth.ts';
+import type { BotSeatSession } from '@/domain/bot/auth.ts';
 import {
   sanitizeUserSession,
   type UserSession,
@@ -15,6 +16,7 @@ export type ORPCContext = {
   headers: Headers;
   request?: Request;
   userSession?: UserSession | null;
+  botSession?: BotSeatSession | null;
 };
 
 const o = os.$context<ORPCContext>();
@@ -25,9 +27,12 @@ const rpcProcedureLogger = createLogger('orpc-procedure');
  * Session is optional (null if not authenticated).
  */
 const authMiddleware = o.middleware(async ({ context, next }) => {
-  if ('userSession' in context) {
+  if ('userSession' in context || 'botSession' in context) {
     return next({
-      context: { userSession: context.userSession ?? null },
+      context: {
+        userSession: context.userSession ?? null,
+        botSession: context.botSession ?? null,
+      },
     });
   }
 
@@ -37,7 +42,7 @@ const authMiddleware = o.middleware(async ({ context, next }) => {
   const session = sanitizeUserSession(rawSession);
 
   return next({
-    context: { userSession: session },
+    context: { userSession: session, botSession: null },
   });
 });
 
@@ -55,8 +60,8 @@ const errorLoggingMiddleware = o.middleware(async (options, input) => {
 
     if (error instanceof ORPCError) {
       if (
-        process.env.ORPC_DEBUG === 'true'
-        || error.code === 'INTERNAL_SERVER_ERROR'
+        process.env.ORPC_DEBUG === 'true' ||
+        error.code === 'INTERNAL_SERVER_ERROR'
       ) {
         rpcProcedureLogger.warn(
           {
@@ -69,6 +74,10 @@ const errorLoggingMiddleware = o.middleware(async (options, input) => {
             userId:
               'userSession' in options.context
                 ? options.context.userSession?.user.id
+                : undefined,
+            botPlayerId:
+              'botSession' in options.context
+                ? options.context.botSession?.playerId
                 : undefined,
             input,
             error: serializeError(error),
@@ -87,6 +96,10 @@ const errorLoggingMiddleware = o.middleware(async (options, input) => {
             'userSession' in options.context
               ? options.context.userSession?.user.id
               : undefined,
+          botPlayerId:
+            'botSession' in options.context
+              ? options.context.botSession?.playerId
+              : undefined,
           input,
           error: serializeError(error),
         },
@@ -103,8 +116,9 @@ const errorLoggingMiddleware = o.middleware(async (options, input) => {
  */
 const requireAuthMiddleware = o.middleware(async ({ context, next }) => {
   const userSession = (context as any).userSession as UserSession;
+  const botSession = (context as any).botSession as BotSeatSession | null;
 
-  if (!userSession) {
+  if (!userSession && !botSession) {
     throw new ORPCError('UNAUTHORIZED', {
       message: 'You must be logged in to do that!',
     });
@@ -112,7 +126,8 @@ const requireAuthMiddleware = o.middleware(async ({ context, next }) => {
 
   return next({
     context: {
-      userSession: userSession as NonNullable<typeof userSession>,
+      userSession: userSession ?? null,
+      botSession,
     },
   });
 });

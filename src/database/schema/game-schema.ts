@@ -1,5 +1,7 @@
 import {
+  type AnyPgColumn,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -8,8 +10,10 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 import * as z from 'zod/v4';
 import { userTable } from './auth-schema.ts';
@@ -53,6 +57,12 @@ export const playerStatusEnum = pgEnum('player_status', PlayerStatuses);
 export type PlayerStatusEnum = (typeof PlayerStatuses)[number];
 export const playerStatusSchema = z.enum(PlayerStatuses);
 
+// --- Room Role ---
+export const RoomRoles = ['creator', 'member'] as const;
+export const roomRoleEnum = pgEnum('room_role', RoomRoles);
+export type RoomRoleEnum = (typeof RoomRoles)[number];
+export const roomRoleSchema = z.enum(RoomRoles);
+
 // --- Season ---
 export const Seasons = ['spring', 'fall'] as const;
 export const seasonEnum = pgEnum('season', Seasons);
@@ -94,6 +104,18 @@ export const buildActionSchema = z.enum(BuildActions);
 // TABLES
 // ============================================================================
 
+// --- Bot ---
+export const botTable = pgTable('bot', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // --- Game Room ---
 export const gameRoomTable = pgTable(
   'game_room',
@@ -103,9 +125,12 @@ export const gameRoomTable = pgTable(
     name: text('name').notNull(),
     status: roomStatusEnum('status').notNull().default('lobby'),
     currentTurnId: uuid('current_turn_id'),
-    winnerId: text('winner_id').references(() => userTable.id, {
-      onDelete: 'set null',
-    }),
+    winnerPlayerId: uuid('winner_player_id').references(
+      (): AnyPgColumn => gamePlayerTable.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
     createdBy: text('created_by')
       .notNull()
       .references(() => userTable.id, { onDelete: 'set null' }),
@@ -126,10 +151,16 @@ export const gamePlayerTable = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     roomId: uuid('room_id')
       .notNull()
-      .references(() => gameRoomTable.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => userTable.id, { onDelete: 'cascade' }),
+      .references((): AnyPgColumn => gameRoomTable.id, {
+        onDelete: 'cascade',
+      }),
+    userId: text('user_id').references(() => userTable.id, {
+      onDelete: 'cascade',
+    }),
+    botId: uuid('bot_id').references(() => botTable.id, {
+      onDelete: 'cascade',
+    }),
+    role: roomRoleEnum('role').notNull().default('member'),
     power: powerEnum('power'),
     status: playerStatusEnum('status').notNull().default('active'),
     isSpectator: boolean('is_spectator').notNull().default(false),
@@ -144,7 +175,39 @@ export const gamePlayerTable = pgTable(
   (table) => [
     index('game_player_room_idx').on(table.roomId),
     index('game_player_user_idx').on(table.userId),
+    index('game_player_bot_idx').on(table.botId),
     unique('game_player_room_user_uniq').on(table.roomId, table.userId),
+    uniqueIndex('game_player_room_bot_uniq')
+      .on(table.roomId, table.botId)
+      .where(sql`${table.botId} is not null`),
+    check(
+      'game_player_actor_check',
+      sql`(("user_id" is not null and "bot_id" is null and "is_bot" = false) or ("user_id" is null and "bot_id" is not null and "is_bot" = true))`,
+    ),
+  ],
+);
+
+// --- Bot Player Credential ---
+export const botPlayerCredentialTable = pgTable(
+  'bot_player_credential',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => gamePlayerTable.id, { onDelete: 'cascade' }),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => botTable.id, { onDelete: 'cascade' }),
+    secretHash: text('secret_hash').notNull(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('bot_player_credential_bot_idx').on(table.botId),
+    unique('bot_player_credential_player_uniq').on(table.playerId),
   ],
 );
 
@@ -270,8 +333,59 @@ export const gameBuildTable = pgTable(
       .notNull()
       .defaultNow(),
   },
+  (table) => [index('game_build_turn_power_idx').on(table.turnId, table.power)],
+);
+
+// --- Game Phase Result ---
+export const gamePhaseResultTable = pgTable(
+  'game_phase_result',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => gameRoomTable.id, { onDelete: 'cascade' }),
+    turnId: uuid('turn_id')
+      .notNull()
+      .references(() => gameTurnTable.id, { onDelete: 'cascade' }),
+    turnNumber: integer('turn_number').notNull(),
+    year: integer('year').notNull(),
+    season: seasonEnum('season').notNull(),
+    phase: gamePhaseEnum('phase').notNull(),
+    payload: jsonb('payload').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
   (table) => [
-    index('game_build_turn_power_idx').on(table.turnId, table.power),
+    index('game_phase_result_room_created_idx').on(
+      table.roomId,
+      table.createdAt,
+    ),
+    index('game_phase_result_turn_idx').on(table.turnId),
+  ],
+);
+
+// --- Game Phase Result Ack ---
+export const gamePhaseResultAckTable = pgTable(
+  'game_phase_result_ack',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    phaseResultId: uuid('phase_result_id')
+      .notNull()
+      .references(() => gamePhaseResultTable.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => gamePlayerTable.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('game_phase_result_ack_player_idx').on(table.playerId),
+    unique('game_phase_result_ack_result_player_uniq').on(
+      table.phaseResultId,
+      table.playerId,
+    ),
   ],
 );
 
@@ -285,8 +399,16 @@ export const gameRoomInsertSchema = createInsertSchema(gameRoomTable, {
   status: roomStatusSchema,
 }).omit({ id: true, createdAt: true, updatedAt: true });
 
+export const botSelectSchema = createSelectSchema(botTable);
+export const botInsertSchema = createInsertSchema(botTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const gamePlayerSelectSchema = createSelectSchema(gamePlayerTable);
 export const gamePlayerInsertSchema = createInsertSchema(gamePlayerTable, {
+  role: roomRoleSchema,
   status: playerStatusSchema,
 }).omit({ id: true, joinedAt: true });
 
@@ -306,3 +428,11 @@ export const gameOrderResultSelectSchema =
   createSelectSchema(gameOrderResultTable);
 export const gameRetreatSelectSchema = createSelectSchema(gameRetreatTable);
 export const gameBuildSelectSchema = createSelectSchema(gameBuildTable);
+export const gamePhaseResultSelectSchema =
+  createSelectSchema(gamePhaseResultTable);
+export const gamePhaseResultAckSelectSchema = createSelectSchema(
+  gamePhaseResultAckTable,
+);
+export const botPlayerCredentialSelectSchema = createSelectSchema(
+  botPlayerCredentialTable,
+);

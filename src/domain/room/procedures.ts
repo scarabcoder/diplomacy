@@ -1,13 +1,23 @@
 import { ORPCError } from '@orpc/client';
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import {
+  createBotCredentialSecret,
+  createBotCredentialToken,
+  hashBotCredentialSecret,
+} from '@/domain/bot/auth.ts';
+import {
+  requireRoomMembershipForActor,
+  requireRpcActor,
+} from '@/domain/player-actor.ts';
 import { authed } from '@/rpc/base.ts';
 import { database } from '@/database/database.ts';
 import {
+  botPlayerCredentialTable,
+  botTable,
   gameRoomTable,
   gamePlayerTable,
   gameTurnTable,
 } from '@/database/schema/game-schema.ts';
-import { userTable } from '@/database/schema/auth-schema.ts';
 import { selectOne } from '@/database/helpers.ts';
 import {
   STARTING_POSITIONS,
@@ -18,13 +28,17 @@ import {
   createRoomSchema,
   joinRoomSchema,
   getRoomSchema,
+  watchRoomPageStateSchema,
   selectPowerSchema,
   deselectPowerSchema,
   setReadySchema,
   startGameSchema,
   fillBotsSchema,
+  finalizePhaseSchema,
   listMyRoomsSchema,
 } from './schema.ts';
+import { getRoomDataSnapshot } from './live-state.ts';
+import { publishRoomEvent, watchRoomPageStateStream } from './realtime.ts';
 
 function generateRoomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1 to avoid confusion
@@ -33,6 +47,35 @@ function generateRoomCode(): string {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+function formatBotName(power: (typeof POWERS)[number]) {
+  return `Bot (${power.charAt(0).toUpperCase() + power.slice(1)})`;
+}
+
+async function getRoomMembership(roomId: string, userId: string) {
+  return selectOne(
+    database
+      .select()
+      .from(gamePlayerTable)
+      .where(
+        and(
+          eq(gamePlayerTable.roomId, roomId),
+          eq(gamePlayerTable.userId, userId),
+        ),
+      ),
+  );
+}
+
+function assertRoomCreator(
+  membership: typeof gamePlayerTable.$inferSelect | null | undefined,
+  action: string,
+) {
+  if (!membership || membership.role !== 'creator') {
+    throw new ORPCError('FORBIDDEN', {
+      message: `Only the room creator can ${action}`,
+    });
+  }
 }
 
 // --- Create Room ---
@@ -55,6 +98,7 @@ export const createRoom = authed
     await database.insert(gamePlayerTable).values({
       roomId: room!.id,
       userId: userSession.user.id,
+      role: 'creator',
       isSpectator: false,
       isReady: false,
       status: 'active',
@@ -120,57 +164,48 @@ export const joinRoom = authed
       })
       .returning();
 
+    publishRoomEvent(room.id, 'join_room');
     return { room, player: player! };
   });
 
 // --- Get Room ---
 export const getRoom = authed
   .input(getRoomSchema)
-  .handler(async ({ input }) => {
-    const room = await selectOne(
-      database
-        .select()
-        .from(gameRoomTable)
-        .where(eq(gameRoomTable.id, input.roomId)),
-    );
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    await requireRoomMembershipForActor(input.roomId, actor);
 
-    if (!room) {
-      throw new ORPCError('NOT_FOUND', { message: 'Room not found' });
+    return getRoomDataSnapshot(input.roomId);
+  });
+
+// --- Watch Room Page State ---
+export const watchRoomPageState = authed
+  .input(watchRoomPageStateSchema)
+  .handler(async ({ input, context: { request, userSession } }) => {
+    const membership = await getRoomMembership(input.roomId, userSession.user.id);
+
+    if (!membership) {
+      throw new ORPCError('FORBIDDEN', {
+        message: 'You are not a member of this room',
+      });
     }
 
-    const players = await database
-      .select()
-      .from(gamePlayerTable)
-      .where(eq(gamePlayerTable.roomId, room.id));
-
-    // Get current turn if game is playing
-    let currentTurn = null;
-    if (room.currentTurnId) {
-      currentTurn = await selectOne(
-        database
-          .select()
-          .from(gameTurnTable)
-          .where(eq(gameTurnTable.id, room.currentTurnId)),
-      );
-    }
-
-    return { room, players, currentTurn: currentTurn ?? null };
+    return watchRoomPageStateStream({
+      roomId: input.roomId,
+      playerId: membership.id,
+      signal: request?.signal,
+    });
   });
 
 // --- Select Power ---
 export const selectPower = authed
   .input(selectPowerSchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const player = await selectOne(
-      database
-        .select()
-        .from(gamePlayerTable)
-        .where(
-          and(
-            eq(gamePlayerTable.roomId, input.roomId),
-            eq(gamePlayerTable.userId, userSession.user.id),
-          ),
-        ),
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const player = await requireRoomMembershipForActor(
+      input.roomId,
+      actor,
+      'You are not a player in this room',
     );
 
     if (!player || player.isSpectator) {
@@ -205,7 +240,7 @@ export const selectPower = authed
         ),
     );
 
-    if (existingClaim && existingClaim.userId !== userSession.user.id) {
+    if (existingClaim && existingClaim.id !== player.id) {
       throw new ORPCError('CONFLICT', {
         message: `${input.power} is already taken`,
       });
@@ -217,23 +252,19 @@ export const selectPower = authed
       .where(eq(gamePlayerTable.id, player.id))
       .returning();
 
+    publishRoomEvent(input.roomId, 'select_power');
     return updated!;
   });
 
 // --- Deselect Power ---
 export const deselectPower = authed
   .input(deselectPowerSchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const player = await selectOne(
-      database
-        .select()
-        .from(gamePlayerTable)
-        .where(
-          and(
-            eq(gamePlayerTable.roomId, input.roomId),
-            eq(gamePlayerTable.userId, userSession.user.id),
-          ),
-        ),
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const player = await requireRoomMembershipForActor(
+      input.roomId,
+      actor,
+      'Player not found',
     );
 
     if (!player) {
@@ -246,23 +277,19 @@ export const deselectPower = authed
       .where(eq(gamePlayerTable.id, player.id))
       .returning();
 
+    publishRoomEvent(input.roomId, 'deselect_power');
     return updated!;
   });
 
 // --- Set Ready ---
 export const setReady = authed
   .input(setReadySchema)
-  .handler(async ({ input, context: { userSession } }) => {
-    const player = await selectOne(
-      database
-        .select()
-        .from(gamePlayerTable)
-        .where(
-          and(
-            eq(gamePlayerTable.roomId, input.roomId),
-            eq(gamePlayerTable.userId, userSession.user.id),
-          ),
-        ),
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const player = await requireRoomMembershipForActor(
+      input.roomId,
+      actor,
+      'You are not a player in this room',
     );
 
     if (!player || player.isSpectator) {
@@ -283,6 +310,7 @@ export const setReady = authed
       .where(eq(gamePlayerTable.id, player.id))
       .returning();
 
+    publishRoomEvent(input.roomId, 'set_ready');
     return updated!;
   });
 
@@ -301,11 +329,11 @@ export const startGame = authed
       throw new ORPCError('NOT_FOUND', { message: 'Room not found' });
     }
 
-    if (room.createdBy !== userSession.user.id) {
-      throw new ORPCError('FORBIDDEN', {
-        message: 'Only the room creator can start the game',
-      });
-    }
+    const membership = await getRoomMembership(
+      input.roomId,
+      userSession.user.id,
+    );
+    assertRoomCreator(membership, 'start the game');
 
     if (room.status !== 'lobby') {
       throw new ORPCError('BAD_REQUEST', {
@@ -371,6 +399,12 @@ export const startGame = authed
         .where(eq(gamePlayerTable.id, player.id));
     }
 
+    publishRoomEvent(input.roomId, 'start_game');
+
+    // Activate AI bots after game starts
+    const { onGameStarted } = await import('@/domain/bot/brain/bot-triggers.ts');
+    onGameStarted(input.roomId);
+
     return { room: { ...room, status: 'playing' as const }, turn: turn! };
   });
 
@@ -389,11 +423,11 @@ export const fillBots = authed
       throw new ORPCError('NOT_FOUND', { message: 'Room not found' });
     }
 
-    if (room.createdBy !== userSession.user.id) {
-      throw new ORPCError('FORBIDDEN', {
-        message: 'Only the room creator can add bots',
-      });
-    }
+    const membership = await getRoomMembership(
+      input.roomId,
+      userSession.user.id,
+    );
+    assertRoomCreator(membership, 'add bots');
 
     if (room.status !== 'lobby') {
       throw new ORPCError('BAD_REQUEST', {
@@ -427,40 +461,115 @@ export const fillBots = authed
       });
     }
 
-    // Create bot user records and player records for each available power
+    const createdBots: Array<{
+      botId: string;
+      playerId: string;
+      roomId: string;
+      power: (typeof POWERS)[number];
+      displayName: string;
+      token: string;
+    }> = [];
+
     for (const power of availablePowers) {
-      const botId = `bot-${power}-${room.id}`;
-
-      // Upsert bot user record
-      await database
-        .insert(userTable)
+      const [bot] = await database
+        .insert(botTable)
         .values({
-          id: botId,
-          name: `Bot (${power.charAt(0).toUpperCase() + power.slice(1)})`,
-          email: `${botId}@bot.local`,
-          emailVerified: false,
-          isAnonymous: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          name: formatBotName(power),
         })
-        .onConflictDoNothing();
+        .returning();
 
-      // Create bot player
-      await database
+      const [player] = await database
         .insert(gamePlayerTable)
         .values({
           roomId: room.id,
-          userId: botId,
+          botId: bot!.id,
           power,
           isSpectator: false,
           isReady: true,
           isBot: true,
           status: 'active',
         })
-        .onConflictDoNothing();
+        .returning();
+
+      const secret = createBotCredentialSecret();
+      const [credential] = await database
+        .insert(botPlayerCredentialTable)
+        .values({
+          playerId: player!.id,
+          botId: bot!.id,
+          secretHash: hashBotCredentialSecret(secret),
+        })
+        .returning();
+
+      createdBots.push({
+        botId: bot!.id,
+        playerId: player!.id,
+        roomId: room.id,
+        power,
+        displayName: bot!.name,
+        token: createBotCredentialToken(credential!.id, secret),
+      });
     }
 
-    return { added: availablePowers.length };
+    publishRoomEvent(input.roomId, 'fill_bots');
+    return { added: availablePowers.length, createdBots };
+  });
+
+// --- Finalize Phase ---
+export const finalizePhase = authed
+  .input(finalizePhaseSchema)
+  .handler(async ({ input, context: { userSession } }) => {
+    const room = await selectOne(
+      database
+        .select()
+        .from(gameRoomTable)
+        .where(eq(gameRoomTable.id, input.roomId)),
+    );
+
+    if (!room) {
+      throw new ORPCError('NOT_FOUND', { message: 'Room not found' });
+    }
+
+    const membership = await getRoomMembership(input.roomId, userSession.user.id);
+    assertRoomCreator(membership, 'finalize the phase');
+
+    if (room.status !== 'playing') {
+      throw new ORPCError('BAD_REQUEST', {
+        message: 'Game is not in progress',
+      });
+    }
+
+    if (!room.currentTurnId) {
+      throw new ORPCError('BAD_REQUEST', {
+        message: 'No active turn',
+      });
+    }
+
+    const turn = await selectOne(
+      database
+        .select()
+        .from(gameTurnTable)
+        .where(eq(gameTurnTable.id, room.currentTurnId)),
+    );
+
+    if (!turn || turn.isComplete) {
+      throw new ORPCError('BAD_REQUEST', {
+        message: 'No active phase to finalize',
+      });
+    }
+
+    const submissionPhases = ['order_submission', 'retreat_submission', 'build_submission'];
+    if (!submissionPhases.includes(turn.phase)) {
+      throw new ORPCError('BAD_REQUEST', {
+        message: 'Current phase is not a submission phase',
+      });
+    }
+
+    const { onFinalizePhase } = await import('@/domain/bot/brain/bot-triggers.ts');
+    await onFinalizePhase(input.roomId);
+
+    publishRoomEvent(input.roomId, 'finalize_phase');
+    return { finalized: true };
   });
 
 // --- List My Rooms ---

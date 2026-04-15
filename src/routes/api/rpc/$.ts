@@ -5,6 +5,13 @@ import { handleLoggedRPCRequest } from '@/rpc/logged-rpc-handler.ts';
 
 const handler = new RPCHandler(appRouter);
 
+// Startup recovery: re-trigger bot activations for any games stuck in submission phases
+void import('@/domain/bot/brain/bot-recovery.ts').then(
+  ({ recoverPendingBotSubmissions }) => {
+    void recoverPendingBotSubmissions();
+  },
+);
+
 export const Route = createFileRoute('/api/rpc/$')({
   server: {
     handlers: {

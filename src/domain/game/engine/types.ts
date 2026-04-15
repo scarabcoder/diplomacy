@@ -140,10 +140,25 @@ export interface RetreatOrder {
   retreatTo: string | null; // null = disband
 }
 
+export const RETREAT_RESULT_TYPES = [
+  'retreated',
+  'disbanded',
+  'failed',
+] as const;
+export type RetreatResultType = (typeof RETREAT_RESULT_TYPES)[number];
+
+export interface RetreatOrderResult {
+  order: RetreatOrder;
+  success: boolean;
+  resultType: RetreatResultType;
+  reason?: string | null;
+}
+
 // --- Retreat Resolution Result ---
 export interface RetreatResult {
   newPositions: UnitPositions;
   disbandedUnits: Array<{ power: Power; unitType: UnitType; province: string }>;
+  orderResults: RetreatOrderResult[];
 }
 
 // --- Build Order ---

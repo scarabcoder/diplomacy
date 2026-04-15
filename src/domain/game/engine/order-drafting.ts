@@ -3,7 +3,6 @@ import {
   HOME_SUPPLY_CENTERS,
   PROVINCES,
   getArmyMoves,
-  getBaseProvince,
   getFleetMoves,
   isMultiCoast,
 } from './map-data.ts';
@@ -14,6 +13,7 @@ import type {
   Unit,
   UnitPositions,
 } from './types.ts';
+import { getBaseProvince } from '../lib/province-refs.ts';
 
 export interface MainOrderDraft {
   unitProvince: string;
@@ -37,7 +37,14 @@ export interface BuildOrderDraft {
 
 export interface OrderAnnotation {
   id: string;
-  kind: 'hold' | 'move' | 'support' | 'convoy' | 'retreat' | 'build' | 'disband';
+  kind:
+    | 'hold'
+    | 'move'
+    | 'support'
+    | 'convoy'
+    | 'retreat'
+    | 'build'
+    | 'disband';
   from: string;
   to?: string;
   aux?: string;
@@ -70,7 +77,9 @@ function getCoastalWaterNeighbors(province: string): string[] {
   const refs = new Set<string>();
 
   for (const regionRef of getProvinceRegionRefs(province)) {
-    const coast = regionRef.includes('/') ? regionRef.split('/')[1] ?? null : null;
+    const coast = regionRef.includes('/')
+      ? (regionRef.split('/')[1] ?? null)
+      : null;
     const moves = getFleetMoves(province, coast);
     for (const move of moves) {
       if (isWaterProvince(move)) {
@@ -107,7 +116,9 @@ function getOccupiedWaterFleets(positions: UnitPositions): string[] {
     .map(([province]) => province);
 }
 
-function getWaterFleetGraph(positions: UnitPositions): Record<string, string[]> {
+function getWaterFleetGraph(
+  positions: UnitPositions,
+): Record<string, string[]> {
   const occupied = new Set(getOccupiedWaterFleets(positions));
   const graph: Record<string, string[]> = {};
 
@@ -197,7 +208,9 @@ export function getConvoyMoveTargets(
   const destinations = new Set<string>();
   for (const component of getArmyConvoyComponents(province, positions)) {
     for (const fleetProvince of component) {
-      for (const destination of getCoastalDestinationsTouchedByWater(fleetProvince)) {
+      for (const destination of getCoastalDestinationsTouchedByWater(
+        fleetProvince,
+      )) {
         if (destination !== province) {
           destinations.add(destination);
         }
@@ -231,7 +244,9 @@ function canUnitReachTarget(
     return true;
   }
 
-  return exactTargets.some((candidate) => getBaseProvince(candidate) === getBaseProvince(target));
+  return exactTargets.some(
+    (candidate) => getBaseProvince(candidate) === getBaseProvince(target),
+  );
 }
 
 export function getSupportableUnitProvinces(
@@ -268,8 +283,8 @@ export function getSupportMoveTargets(
     return [];
   }
 
-  return getPotentialMoveTargets(supportedProvince, positions).filter((target) =>
-    canUnitReachTarget(supporterProvince, supporter, target),
+  return getPotentialMoveTargets(supportedProvince, positions).filter(
+    (target) => canUnitReachTarget(supporterProvince, supporter, target),
   );
 }
 
@@ -291,7 +306,11 @@ export function getConvoyableArmyProvincesForFleet(
   positions: UnitPositions,
 ): string[] {
   const fleet = positions[fleetProvince];
-  if (!fleet || fleet.unitType !== 'fleet' || PROVINCES[fleetProvince]?.type !== 'water') {
+  if (
+    !fleet ||
+    fleet.unitType !== 'fleet' ||
+    PROVINCES[fleetProvince]?.type !== 'water'
+  ) {
     return [];
   }
 
@@ -308,8 +327,10 @@ export function getConvoyableArmyProvincesForFleet(
         fleetComponent.has(waterNeighbor),
       ),
     )
-    .filter(([province]) =>
-      getCoastalDestinationsForFleetArmy(fleetProvince, province, positions).length > 0,
+    .filter(
+      ([province]) =>
+        getCoastalDestinationsForFleetArmy(fleetProvince, province, positions)
+          .length > 0,
     )
     .map(([province]) => province);
 }
@@ -322,20 +343,20 @@ export function getCoastalDestinationsForFleetArmy(
   const fleet = positions[fleetProvince];
   const army = positions[armyProvince];
   if (
-    !fleet
-    || fleet.unitType !== 'fleet'
-    || PROVINCES[fleetProvince]?.type !== 'water'
-    || !army
-    || army.unitType !== 'army'
-    || !isCoastalProvince(armyProvince)
+    !fleet ||
+    fleet.unitType !== 'fleet' ||
+    PROVINCES[fleetProvince]?.type !== 'water' ||
+    !army ||
+    army.unitType !== 'army' ||
+    !isCoastalProvince(armyProvince)
   ) {
     return [];
   }
 
   const graph = getWaterFleetGraph(positions);
   const fleetComponent = getFleetComponent(fleetProvince, graph);
-  const touchesOrigin = getCoastalWaterNeighbors(armyProvince).some((waterNeighbor) =>
-    fleetComponent.has(waterNeighbor),
+  const touchesOrigin = getCoastalWaterNeighbors(armyProvince).some(
+    (waterNeighbor) => fleetComponent.has(waterNeighbor),
   );
 
   if (!touchesOrigin) {
@@ -344,7 +365,9 @@ export function getCoastalDestinationsForFleetArmy(
 
   const destinations = new Set<string>();
   for (const waterProvince of fleetComponent) {
-    for (const destination of getCoastalDestinationsTouchedByWater(waterProvince)) {
+    for (const destination of getCoastalDestinationsTouchedByWater(
+      waterProvince,
+    )) {
       if (destination !== armyProvince) {
         destinations.add(destination);
       }
@@ -374,7 +397,8 @@ export function getBuildChoices(province: string): Array<{
     return [];
   }
 
-  const choices: Array<{ unitType: 'army' | 'fleet'; coast: string | null }> = [];
+  const choices: Array<{ unitType: 'army' | 'fleet'; coast: string | null }> =
+    [];
 
   if (provinceData.type !== 'water') {
     choices.push({ unitType: 'army', coast: null });
@@ -447,9 +471,9 @@ export function getMainOrderAnnotations(
     }
 
     if (
-      order.orderType === 'convoy'
-      && order.supportedUnitProvince
-      && order.targetProvince
+      order.orderType === 'convoy' &&
+      order.supportedUnitProvince &&
+      order.targetProvince
     ) {
       annotations.push({
         id: `convoy-${province}-${order.supportedUnitProvince}-${order.targetProvince}`,
@@ -580,9 +604,9 @@ export function describeMainOrder(
   }
 
   if (
-    order.orderType === 'convoy'
-    && order.supportedUnitProvince
-    && order.targetProvince
+    order.orderType === 'convoy' &&
+    order.supportedUnitProvince &&
+    order.targetProvince
   ) {
     return `${unitLabel} ${origin} C A ${describeProvinceRef(order.supportedUnitProvince)} -> ${describeProvinceRef(order.targetProvince)}`;
   }

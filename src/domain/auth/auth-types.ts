@@ -1,9 +1,6 @@
 import * as z from 'zod/v4';
 import type { InferSelectModel } from 'drizzle-orm';
-import {
-  sessionTable,
-  userTable,
-} from '@/database/schema/auth-schema.ts';
+import { sessionTable, userTable } from '@/database/schema/auth-schema.ts';
 
 export type User = InferSelectModel<typeof userTable>;
 export type DbSession = InferSelectModel<typeof sessionTable>;

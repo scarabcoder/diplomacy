@@ -12,11 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteRouteImport } from './routes/_auth/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as ApiRpcSplatRouteImport } from './routes/api/rpc/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
-import { Route as AuthenticatedRoomsRoomIdRouteImport } from './routes/_authenticated/rooms/$roomId'
+import { Route as AuthenticatedRoomsRoomIdRouteRouteImport } from './routes/_authenticated/rooms/$roomId/route'
+import { Route as AuthenticatedRoomsRoomIdIndexRouteImport } from './routes/_authenticated/rooms/$roomId/index'
+import { Route as AuthenticatedRoomsRoomIdBotsPlayerIdRouteImport } from './routes/_authenticated/rooms/$roomId/bots/$playerId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -30,6 +33,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiMcpRoute = ApiMcpRouteImport.update({
+  id: '/api/mcp',
+  path: '/api/mcp',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRegisterRoute = AuthRegisterRouteImport.update({
   id: '/register',
@@ -51,28 +59,45 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoomsRoomIdRoute =
-  AuthenticatedRoomsRoomIdRouteImport.update({
+const AuthenticatedRoomsRoomIdRouteRoute =
+  AuthenticatedRoomsRoomIdRouteRouteImport.update({
     id: '/rooms/$roomId',
     path: '/rooms/$roomId',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedRoomsRoomIdIndexRoute =
+  AuthenticatedRoomsRoomIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedRoomsRoomIdRouteRoute,
+  } as any)
+const AuthenticatedRoomsRoomIdBotsPlayerIdRoute =
+  AuthenticatedRoomsRoomIdBotsPlayerIdRouteImport.update({
+    id: '/bots/$playerId',
+    path: '/bots/$playerId',
+    getParentRoute: () => AuthenticatedRoomsRoomIdRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
-  '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRoute
+  '/api/mcp': typeof ApiMcpRoute
+  '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteRouteWithChildren
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/rooms/$roomId/': typeof AuthenticatedRoomsRoomIdIndexRoute
+  '/rooms/$roomId/bots/$playerId': typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
-  '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRoute
+  '/api/mcp': typeof ApiMcpRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdIndexRoute
+  '/rooms/$roomId/bots/$playerId': typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,10 +105,13 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_auth/login': typeof AuthLoginRoute
   '/_auth/register': typeof AuthRegisterRoute
+  '/api/mcp': typeof ApiMcpRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRoute
+  '/_authenticated/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteRouteWithChildren
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/_authenticated/rooms/$roomId/': typeof AuthenticatedRoomsRoomIdIndexRoute
+  '/_authenticated/rooms/$roomId/bots/$playerId': typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,32 +119,41 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/api/mcp'
     | '/rooms/$roomId'
     | '/api/auth/$'
     | '/api/rpc/$'
+    | '/rooms/$roomId/'
+    | '/rooms/$roomId/bots/$playerId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/register'
-    | '/rooms/$roomId'
+    | '/api/mcp'
     | '/api/auth/$'
     | '/api/rpc/$'
+    | '/rooms/$roomId'
+    | '/rooms/$roomId/bots/$playerId'
   id:
     | '__root__'
     | '/_auth'
     | '/_authenticated'
     | '/_auth/login'
     | '/_auth/register'
+    | '/api/mcp'
     | '/_authenticated/'
     | '/_authenticated/rooms/$roomId'
     | '/api/auth/$'
     | '/api/rpc/$'
+    | '/_authenticated/rooms/$roomId/'
+    | '/_authenticated/rooms/$roomId/bots/$playerId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthRouteRoute: typeof AuthRouteRouteWithChildren
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ApiMcpRoute: typeof ApiMcpRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRpcSplatRoute: typeof ApiRpcSplatRoute
 }
@@ -143,6 +180,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/mcp': {
+      id: '/api/mcp'
+      path: '/api/mcp'
+      fullPath: '/api/mcp'
+      preLoaderRoute: typeof ApiMcpRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_auth/register': {
       id: '/_auth/register'
@@ -176,8 +220,22 @@ declare module '@tanstack/react-router' {
       id: '/_authenticated/rooms/$roomId'
       path: '/rooms/$roomId'
       fullPath: '/rooms/$roomId'
-      preLoaderRoute: typeof AuthenticatedRoomsRoomIdRouteImport
+      preLoaderRoute: typeof AuthenticatedRoomsRoomIdRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/rooms/$roomId/': {
+      id: '/_authenticated/rooms/$roomId/'
+      path: '/'
+      fullPath: '/rooms/$roomId/'
+      preLoaderRoute: typeof AuthenticatedRoomsRoomIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRoomsRoomIdRouteRoute
+    }
+    '/_authenticated/rooms/$roomId/bots/$playerId': {
+      id: '/_authenticated/rooms/$roomId/bots/$playerId'
+      path: '/bots/$playerId'
+      fullPath: '/rooms/$roomId/bots/$playerId'
+      preLoaderRoute: typeof AuthenticatedRoomsRoomIdBotsPlayerIdRouteImport
+      parentRoute: typeof AuthenticatedRoomsRoomIdRouteRoute
     }
   }
 }
@@ -196,14 +254,32 @@ const AuthRouteRouteWithChildren = AuthRouteRoute._addFileChildren(
   AuthRouteRouteChildren,
 )
 
+interface AuthenticatedRoomsRoomIdRouteRouteChildren {
+  AuthenticatedRoomsRoomIdIndexRoute: typeof AuthenticatedRoomsRoomIdIndexRoute
+  AuthenticatedRoomsRoomIdBotsPlayerIdRoute: typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
+}
+
+const AuthenticatedRoomsRoomIdRouteRouteChildren: AuthenticatedRoomsRoomIdRouteRouteChildren =
+  {
+    AuthenticatedRoomsRoomIdIndexRoute: AuthenticatedRoomsRoomIdIndexRoute,
+    AuthenticatedRoomsRoomIdBotsPlayerIdRoute:
+      AuthenticatedRoomsRoomIdBotsPlayerIdRoute,
+  }
+
+const AuthenticatedRoomsRoomIdRouteRouteWithChildren =
+  AuthenticatedRoomsRoomIdRouteRoute._addFileChildren(
+    AuthenticatedRoomsRoomIdRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedRoomsRoomIdRoute: typeof AuthenticatedRoomsRoomIdRoute
+  AuthenticatedRoomsRoomIdRouteRoute: typeof AuthenticatedRoomsRoomIdRouteRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedRoomsRoomIdRoute: AuthenticatedRoomsRoomIdRoute,
+  AuthenticatedRoomsRoomIdRouteRoute:
+    AuthenticatedRoomsRoomIdRouteRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -212,6 +288,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthRouteRoute: AuthRouteRouteWithChildren,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ApiMcpRoute: ApiMcpRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,
 }

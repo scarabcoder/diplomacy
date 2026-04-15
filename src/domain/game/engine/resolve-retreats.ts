@@ -6,7 +6,7 @@ import type {
   Power,
   UnitType,
 } from './types.ts';
-import { getBaseProvince } from './map-data.ts';
+import { getBaseProvince } from '../lib/province-refs.ts';
 
 /**
  * Resolve retreat orders.
@@ -112,5 +112,5 @@ export function resolveRetreats(
     }
   }
 
-  return { newPositions, disbandedUnits };
+  return { newPositions, disbandedUnits, orderResults: [] };
 }
