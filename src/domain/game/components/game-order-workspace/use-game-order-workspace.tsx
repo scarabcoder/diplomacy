@@ -8,6 +8,7 @@ import {
   Clock,
   HandHelping,
   ScrollText,
+  Send,
   Shield,
   Ship,
   ShipWheel,
