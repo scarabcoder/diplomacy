@@ -870,7 +870,7 @@ function FinalizePhaseButton({
   };
 
   return (
-    <div className="fixed bottom-5 left-5 z-50">
+    <div className="fixed bottom-5 left-5 z-50 hidden md:block">
       <Button
         className="h-11 rounded-full border border-black/10 bg-white/90 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground shadow-lg backdrop-blur-sm hover:bg-white"
         disabled={finalizeMutation.isPending}
