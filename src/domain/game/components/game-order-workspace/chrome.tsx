@@ -149,16 +149,18 @@ function HeaderStatusChip({
   icon: Icon,
   label,
   className,
-}: HeaderStatusChipData) {
+  compact,
+}: HeaderStatusChipData & { compact?: boolean }) {
   return (
     <span
       className={cn(
         'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold tracking-[0.08em] shadow-sm',
+        compact && 'flex-1 justify-center px-2 py-1.5 md:flex-initial md:px-3.5',
         className,
       )}
     >
       <Icon className="size-4 shrink-0" />
-      <span>{label}</span>
+      <span className={cn(compact && 'hidden md:inline')}>{label}</span>
     </span>
   );
 }
@@ -763,7 +765,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-base font-medium text-white/82 md:block">
           <span>{bannerMeta}</span>
         </div>
-        <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
+        <div className="flex flex-1 items-center justify-end gap-1.5 md:flex-none md:gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -771,14 +773,17 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
             aria-label={isMessagesOpen ? 'Hide messages' : 'Show messages'}
             onClick={onToggleMessages}
             className={cn(
-              'h-11 min-w-0 flex-1 justify-start gap-2.5 rounded-full border px-3 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:min-w-[7.25rem] md:flex-initial',
+              'h-9 min-w-0 flex-1 justify-center gap-1.5 rounded-full border px-2 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[7.25rem] md:flex-initial md:justify-start md:gap-2.5 md:px-3',
               isMessagesOpen
                 ? 'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white'
                 : 'border-white/10 bg-white/[0.08] text-white/82',
             )}
           >
             <MessageSquare className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">
+            <span className="text-sm font-semibold text-white md:hidden">
+              {unreadThreadCount > 0 ? unreadThreadCount : '\u2014'}
+            </span>
+            <span className="hidden min-w-0 flex-1 md:block">
               <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
                 Messages
               </span>
@@ -806,14 +811,17 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
             }
             onClick={onTogglePlayersWindow}
             className={cn(
-              'h-11 min-w-0 flex-1 justify-start gap-2.5 rounded-full border px-3 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:min-w-[7.25rem] md:flex-initial',
+              'h-9 min-w-0 flex-1 justify-center gap-1.5 rounded-full border px-2 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[7.25rem] md:flex-initial md:justify-start md:gap-2.5 md:px-3',
               playersButtonStatusTone,
               isPlayersWindowOpen &&
                 'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white',
             )}
           >
             <Users className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">
+            <span className="text-sm font-semibold text-white md:hidden">
+              {activeCount}
+            </span>
+            <span className="hidden min-w-0 flex-1 md:block">
               <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
                 Players
               </span>
@@ -828,12 +836,12 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
               {playersButtonSummary}
             </span>
           </Button>
-          <div className="hidden items-center gap-2 md:flex">
-            {buildStatusChip ? <HeaderStatusChip {...buildStatusChip} /> : null}
-            {submissionStatusChip ? (
-              <HeaderStatusChip {...submissionStatusChip} />
-            ) : null}
-          </div>
+          {buildStatusChip ? (
+            <HeaderStatusChip {...buildStatusChip} compact />
+          ) : null}
+          {submissionStatusChip ? (
+            <HeaderStatusChip {...submissionStatusChip} compact />
+          ) : null}
         </div>
         <PlayersWindowLayer
           isOpen={isPlayersWindowOpen}
@@ -850,14 +858,6 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
       </div>
       <div className="pointer-events-auto border-t border-white/10 px-3 py-1.5 text-center text-[15px] font-medium text-white/82 md:hidden sm:px-4">
         <div>{bannerMeta}</div>
-        {buildStatusChip || submissionStatusChip ? (
-          <div className="mt-2 flex flex-wrap justify-center gap-2">
-            {buildStatusChip ? <HeaderStatusChip {...buildStatusChip} /> : null}
-            {submissionStatusChip ? (
-              <HeaderStatusChip {...submissionStatusChip} />
-            ) : null}
-          </div>
-        ) : null}
       </div>
     </div>
   );
