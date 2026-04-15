@@ -747,23 +747,23 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 border-b border-black/10 bg-[#111827]/78 text-white backdrop-blur-md">
       <div className="pointer-events-auto relative flex min-h-12 items-center justify-between gap-3 px-3 py-2 sm:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+        <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex md:gap-3">
           <Link
             to="/"
-            className="hidden shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/55 transition hover:text-white md:inline"
+            className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/55 transition hover:text-white"
           >
             Back
           </Link>
-          <div className="hidden h-4 w-px shrink-0 bg-white/15 md:block" />
+          <div className="h-4 w-px shrink-0 bg-white/15" />
           <h1 className="truncate text-sm font-semibold">{roomName}</h1>
-          <span className="hidden shrink-0 rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.18em] text-white/75 md:inline">
+          <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] tracking-[0.18em] text-white/75">
             {roomCode}
           </span>
         </div>
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-base font-medium text-white/82 md:block">
           <span>{bannerMeta}</span>
         </div>
-        <div className="flex shrink-0 items-center justify-end gap-2">
+        <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
           <Button
             type="button"
             variant="ghost"
@@ -771,7 +771,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
             aria-label={isMessagesOpen ? 'Hide messages' : 'Show messages'}
             onClick={onToggleMessages}
             className={cn(
-              'h-11 min-w-[7.25rem] justify-start gap-2.5 rounded-full border px-3 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white',
+              'h-11 min-w-0 flex-1 justify-start gap-2.5 rounded-full border px-3 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:min-w-[7.25rem] md:flex-initial',
               isMessagesOpen
                 ? 'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white'
                 : 'border-white/10 bg-white/[0.08] text-white/82',
@@ -806,7 +806,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
             }
             onClick={onTogglePlayersWindow}
             className={cn(
-              'h-11 min-w-[7.25rem] justify-start gap-2.5 rounded-full border px-3 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white',
+              'h-11 min-w-0 flex-1 justify-start gap-2.5 rounded-full border px-3 text-left shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:min-w-[7.25rem] md:flex-initial',
               playersButtonStatusTone,
               isPlayersWindowOpen &&
                 'border-[color:var(--accent-brass)] bg-[color:color-mix(in_oklab,var(--accent-brass)_24%,white_6%)] text-white',
