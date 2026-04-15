@@ -789,7 +789,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
           >
             <MessageSquare className="size-4 shrink-0" />
             <span className="text-sm font-semibold text-white md:hidden">
-              {unreadThreadCount > 0 ? unreadThreadCount : '\u2014'}
+              {unreadThreadCount}
             </span>
             <span className="hidden min-w-0 flex-1 md:block">
               <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
