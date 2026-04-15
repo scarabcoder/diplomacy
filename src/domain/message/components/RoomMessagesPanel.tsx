@@ -464,7 +464,7 @@ export function RoomMessagesPanel({
             draftBody={draftBody}
             isBusy={
               threadsQuery.isLoading ||
-              activeThreadQuery.isFetching ||
+              activeThreadQuery.isLoading ||
               openOrCreateMutation.isPending ||
               sendMessageMutation.isPending
             }
@@ -514,7 +514,7 @@ export function RoomMessagesPanel({
             draftBody={draftBody}
             isBusy={
               threadsQuery.isLoading ||
-              activeThreadQuery.isFetching ||
+              activeThreadQuery.isLoading ||
               openOrCreateMutation.isPending ||
               sendMessageMutation.isPending
             }
