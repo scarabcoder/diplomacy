@@ -194,9 +194,11 @@ function phaseResultHighlights(
   return highlights;
 }
 
-export function renderPhaseResultEmail(
-  input: PhaseResultNotificationInput,
-): { subject: string; html: string; text: string } {
+export function renderPhaseResultEmail(input: PhaseResultNotificationInput): {
+  subject: string;
+  html: string;
+  text: string;
+} {
   const { payload } = input;
   const season = seasonLabel(payload.season);
   const phase = phaseLabel(payload.phase);
@@ -264,7 +266,10 @@ export function renderPhaseResultEmail(
             (highlight) => `<div style="margin-bottom:14px;">
           <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;margin-bottom:6px;">${escapeHtml(highlight.label)}</div>
           <ul style="margin:0;padding-left:18px;">${highlight.items
-            .map((item) => `<li style="margin-bottom:2px;">${escapeHtml(item)}</li>`)
+            .map(
+              (item) =>
+                `<li style="margin-bottom:2px;">${escapeHtml(item)}</li>`,
+            )
             .join('')}</ul>
         </div>`,
           )
@@ -301,9 +306,12 @@ export function renderPhaseResultEmail(
   return { subject, html, text };
 }
 
-export function renderPhaseResultPush(
-  input: PhaseResultNotificationInput,
-): { title: string; body: string; url: string; tag: string } {
+export function renderPhaseResultPush(input: PhaseResultNotificationInput): {
+  title: string;
+  body: string;
+  url: string;
+  tag: string;
+} {
   const { payload } = input;
   const season = seasonLabel(payload.season);
   const phase = phaseLabel(payload.phase);
@@ -319,4 +327,56 @@ export function renderPhaseResultPush(
     url: roomUrl(input.roomId),
     tag: `phase-result:${input.roomId}:${payload.turnNumber}:${payload.phase}`,
   };
+}
+
+export type SignupOtpEmailInput = {
+  otp: string;
+  ttlMinutes: number;
+};
+
+export function renderSignupOtpEmail(input: SignupOtpEmailInput): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const subject = `Your sign-up code: ${input.otp}`;
+
+  const text = [
+    'Use this code to finish creating your Diplomacy account:',
+    '',
+    input.otp,
+    '',
+    `This code expires in ${input.ttlMinutes} minutes. If you did not request it, you can ignore this email.`,
+  ].join('\n');
+
+  const html = `<!doctype html>
+<html>
+<body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f4f5;padding:24px;margin:0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;">
+    <tr>
+      <td style="padding:24px 28px;border-bottom:1px solid #e5e7eb;">
+        <div style="font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.12em;">Confirm your email</div>
+        <div style="font-size:18px;font-weight:600;color:#111827;margin-top:4px;">Finish creating your account</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:24px 28px;font-size:15px;color:#1f2937;line-height:1.5;">
+        Enter this code on the sign-up page to confirm your email:
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 8px;text-align:center;">
+        <div style="display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:32px;letter-spacing:0.4em;font-weight:600;color:#111827;background:#f3f4f6;border-radius:8px;padding:14px 22px;">${escapeHtml(input.otp)}</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:16px 28px 24px;font-size:13px;color:#6b7280;line-height:1.5;">
+        This code expires in ${input.ttlMinutes} minutes. If you did not request it, you can ignore this email.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return { subject, html, text };
 }

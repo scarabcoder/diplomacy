@@ -20,6 +20,8 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedRoomsRoomIdRouteRouteImport } from './routes/_authenticated/rooms/$roomId/route'
 import { Route as AuthenticatedRoomsRoomIdIndexRouteImport } from './routes/_authenticated/rooms/$roomId/index'
+import { Route as ApiAuthSignupVerifyOtpRouteImport } from './routes/api/auth/signup/verify-otp'
+import { Route as ApiAuthSignupRequestOtpRouteImport } from './routes/api/auth/signup/request-otp'
 import { Route as AuthenticatedRoomsRoomIdBotsPlayerIdRouteImport } from './routes/_authenticated/rooms/$roomId/bots/$playerId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -78,6 +80,16 @@ const AuthenticatedRoomsRoomIdIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedRoomsRoomIdRouteRoute,
   } as any)
+const ApiAuthSignupVerifyOtpRoute = ApiAuthSignupVerifyOtpRouteImport.update({
+  id: '/api/auth/signup/verify-otp',
+  path: '/api/auth/signup/verify-otp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSignupRequestOtpRoute = ApiAuthSignupRequestOtpRouteImport.update({
+  id: '/api/auth/signup/request-otp',
+  path: '/api/auth/signup/request-otp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedRoomsRoomIdBotsPlayerIdRoute =
   AuthenticatedRoomsRoomIdBotsPlayerIdRouteImport.update({
     id: '/bots/$playerId',
@@ -94,6 +106,8 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/api/auth/signup/request-otp': typeof ApiAuthSignupRequestOtpRoute
+  '/api/auth/signup/verify-otp': typeof ApiAuthSignupVerifyOtpRoute
   '/rooms/$roomId/': typeof AuthenticatedRoomsRoomIdIndexRoute
   '/rooms/$roomId/bots/$playerId': typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
 }
@@ -105,6 +119,8 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/api/auth/signup/request-otp': typeof ApiAuthSignupRequestOtpRoute
+  '/api/auth/signup/verify-otp': typeof ApiAuthSignupVerifyOtpRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdIndexRoute
   '/rooms/$roomId/bots/$playerId': typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
 }
@@ -120,6 +136,8 @@ export interface FileRoutesById {
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
+  '/api/auth/signup/request-otp': typeof ApiAuthSignupRequestOtpRoute
+  '/api/auth/signup/verify-otp': typeof ApiAuthSignupVerifyOtpRoute
   '/_authenticated/rooms/$roomId/': typeof AuthenticatedRoomsRoomIdIndexRoute
   '/_authenticated/rooms/$roomId/bots/$playerId': typeof AuthenticatedRoomsRoomIdBotsPlayerIdRoute
 }
@@ -134,6 +152,8 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/api/auth/$'
     | '/api/rpc/$'
+    | '/api/auth/signup/request-otp'
+    | '/api/auth/signup/verify-otp'
     | '/rooms/$roomId/'
     | '/rooms/$roomId/bots/$playerId'
   fileRoutesByTo: FileRoutesByTo
@@ -145,6 +165,8 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/api/auth/$'
     | '/api/rpc/$'
+    | '/api/auth/signup/request-otp'
+    | '/api/auth/signup/verify-otp'
     | '/rooms/$roomId'
     | '/rooms/$roomId/bots/$playerId'
   id:
@@ -159,6 +181,8 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/notifications'
     | '/api/auth/$'
     | '/api/rpc/$'
+    | '/api/auth/signup/request-otp'
+    | '/api/auth/signup/verify-otp'
     | '/_authenticated/rooms/$roomId/'
     | '/_authenticated/rooms/$roomId/bots/$playerId'
   fileRoutesById: FileRoutesById
@@ -169,6 +193,8 @@ export interface RootRouteChildren {
   ApiMcpRoute: typeof ApiMcpRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRpcSplatRoute: typeof ApiRpcSplatRoute
+  ApiAuthSignupRequestOtpRoute: typeof ApiAuthSignupRequestOtpRoute
+  ApiAuthSignupVerifyOtpRoute: typeof ApiAuthSignupVerifyOtpRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -250,6 +276,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRoomsRoomIdIndexRouteImport
       parentRoute: typeof AuthenticatedRoomsRoomIdRouteRoute
     }
+    '/api/auth/signup/verify-otp': {
+      id: '/api/auth/signup/verify-otp'
+      path: '/api/auth/signup/verify-otp'
+      fullPath: '/api/auth/signup/verify-otp'
+      preLoaderRoute: typeof ApiAuthSignupVerifyOtpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/signup/request-otp': {
+      id: '/api/auth/signup/request-otp'
+      path: '/api/auth/signup/request-otp'
+      fullPath: '/api/auth/signup/request-otp'
+      preLoaderRoute: typeof ApiAuthSignupRequestOtpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/rooms/$roomId/bots/$playerId': {
       id: '/_authenticated/rooms/$roomId/bots/$playerId'
       path: '/bots/$playerId'
@@ -314,6 +354,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMcpRoute: ApiMcpRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,
+  ApiAuthSignupRequestOtpRoute: ApiAuthSignupRequestOtpRoute,
+  ApiAuthSignupVerifyOtpRoute: ApiAuthSignupVerifyOtpRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

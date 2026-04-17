@@ -1,6 +1,5 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { anonymous } from 'better-auth/plugins';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { database } from '@/database/database.ts';
 import * as schema from '@/database/schema';
@@ -20,5 +19,5 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false,
   },
-  plugins: [tanstackStartCookies(), anonymous()],
+  plugins: [tanstackStartCookies()],
 });

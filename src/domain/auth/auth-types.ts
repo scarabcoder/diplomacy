@@ -65,7 +65,6 @@ export function sanitizeUserSession(input: unknown): UserSession | null {
       email: candidate.user.email ?? '',
       emailVerified: candidate.user.emailVerified ?? false,
       image: candidate.user.image ?? null,
-      isAnonymous: candidate.user.isAnonymous ?? false,
       createdAt: candidate.user.createdAt ?? new Date(0),
       updatedAt: candidate.user.updatedAt ?? new Date(0),
     },

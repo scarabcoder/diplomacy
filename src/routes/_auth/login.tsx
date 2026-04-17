@@ -1,25 +1,16 @@
 import type { ReactNode } from 'react';
-import { ArrowRight, ShieldCheck, UserRound, Users } from 'lucide-react';
+import { ArrowRight, ShieldCheck, UserRound } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import * as z from 'zod/v4';
 import { AuthFrame } from '@/components/surfaces/auth-frame.tsx';
-import {
-  ParchmentPanel,
-  SectionKicker,
-  StatusSeal,
-} from '@/components/surfaces/war-room.tsx';
-import { Separator } from '@/components/ui/separator.tsx';
+import { SectionKicker, StatusSeal } from '@/components/surfaces/war-room.tsx';
 import { authClient } from '@/domain/auth/client.ts';
 import { useAppForm } from '@/lib/form.ts';
 
 const loginSchema = z.object({
   email: z.email('Please use a valid email address'),
   password: z.string().min(1, 'Password is required'),
-});
-
-const guestSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
 });
 
 const fieldInputClassName =
@@ -37,14 +28,6 @@ const signInEmail = async ({
     password,
   });
   if (error) throw new Error(error?.message);
-  return response;
-};
-
-const signInGuest = async ({ name }: z.infer<typeof guestSchema>) => {
-  const { error, data: response } = await authClient.signIn.anonymous();
-  if (error) throw new Error(error?.message);
-  const { error: updateError } = await authClient.updateUser({ name });
-  if (updateError) throw new Error(updateError?.message);
   return response;
 };
 
@@ -72,15 +55,6 @@ function LoginPage() {
     onSuccess,
   });
 
-  const {
-    mutateAsync: guestMutation,
-    isError: isGuestError,
-    error: guestError,
-  } = useMutation({
-    mutationFn: signInGuest,
-    onSuccess,
-  });
-
   const loginForm = useAppForm({
     defaultValues: {
       email: '',
@@ -91,18 +65,6 @@ function LoginPage() {
     },
     onSubmit: async ({ value }) => {
       await signInMutation(value);
-    },
-  });
-
-  const guestForm = useAppForm({
-    defaultValues: {
-      name: '',
-    },
-    validators: {
-      onSubmit: guestSchema,
-    },
-    onSubmit: async ({ value }) => {
-      await guestMutation(value);
     },
   });
 
@@ -131,11 +93,6 @@ function LoginPage() {
               icon={<ShieldCheck className="size-4" />}
               title="Quick status"
               body="Open a room and see its current state without extra steps."
-            />
-            <FeatureRow
-              icon={<Users className="size-4" />}
-              title="Guest access"
-              body="Join with a display name only when you do not need a saved account."
             />
             <FeatureRow
               icon={<UserRound className="size-4" />}
@@ -207,64 +164,6 @@ function LoginPage() {
             </loginForm.AppForm>
           </form>
         </section>
-
-        <div className="relative">
-          <Separator className="bg-black/10" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="rounded-full border border-black/10 bg-[color:color-mix(in_oklab,var(--paper)_86%,white_14%)] px-3 py-1 text-[0.67rem] font-bold uppercase tracking-[0.24em] text-muted-foreground">
-              Or continue as guest
-            </span>
-          </div>
-        </div>
-
-        <ParchmentPanel as="section" className="space-y-5 p-5">
-          <div className="space-y-1">
-            <h2 className="font-display text-xl text-foreground">
-              Guest access
-            </h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Enter with a display name only. Useful for test rooms or informal
-              games.
-            </p>
-          </div>
-
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              guestForm.handleSubmit();
-            }}
-          >
-            <guestForm.AppField name="name">
-              {(field) => (
-                <field.FormInput
-                  autoComplete="name"
-                  inputClassName={fieldInputClassName}
-                  label="Display name"
-                  placeholder="Nick Harris"
-                  type="text"
-                />
-              )}
-            </guestForm.AppField>
-
-            {isGuestError ? (
-              <p className="rounded-[1rem] bg-[oklch(0.92_0.04_28)] px-4 py-3 text-sm text-destructive">
-                {guestError.message}
-              </p>
-            ) : null}
-
-            <guestForm.AppForm>
-              <guestForm.FormSubmitButton
-                className={`${actionButtonClassName} w-full border border-[color:color-mix(in_oklab,var(--accent-navy)_18%,var(--border)_82%)] bg-[color:color-mix(in_oklab,var(--paper-strong)_74%,white_26%)] text-foreground hover:bg-[color:color-mix(in_oklab,var(--paper-strong)_64%,var(--accent-brass)_36%)]`}
-                listenForIsDefault={false}
-                listenForIsDirty={false}
-                variant="secondary"
-              >
-                Join as guest
-              </guestForm.FormSubmitButton>
-            </guestForm.AppForm>
-          </form>
-        </ParchmentPanel>
 
         <p className="text-sm text-muted-foreground">
           New to the table?{' '}

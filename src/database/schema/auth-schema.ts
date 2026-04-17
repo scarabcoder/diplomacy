@@ -10,9 +10,6 @@ export const userTable = pgTable('user', {
     .$defaultFn(() => !1)
     .notNull(),
   image: text('image'),
-  isAnonymous: boolean('is_anonymous')
-    .$defaultFn(() => !1)
-    .notNull(),
   createdAt: timestamp('created_at')
     .$defaultFn(() => new Date())
     .notNull(),
