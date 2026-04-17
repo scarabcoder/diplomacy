@@ -8,6 +8,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: parseInt(process.env.PORT!) || 3000,
     strictPort: true,
+    proxy: {
+      '/ingest': {
+        target: 'https://us.i.posthog.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ingest/, ''),
+        secure: false,
+      },
+    },
   },
   resolve: {
     tsconfigPaths: true,

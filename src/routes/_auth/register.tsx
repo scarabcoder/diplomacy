@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { usePostHog } from 'posthog-js/react';
 import { triggerSessionChange } from '@/domain/auth/client.ts';
 import {
   signupRequestSchema,
@@ -269,6 +270,7 @@ function VerifyStep({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { redirect } = Route.useSearch();
+  const posthog = usePostHog();
 
   const {
     mutateAsync: verify,
@@ -276,10 +278,22 @@ function VerifyStep({
     error,
   } = useMutation({
     mutationFn: verifyOtp,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const user = (data as { user?: { id?: string; name?: string; email?: string } })
+        .user;
+      if (user?.id) {
+        posthog.identify(user.id, {
+          email: user.email,
+          name: user.name,
+        });
+      }
+      posthog.capture('user_signed_up', { method: 'email' });
       queryClient.clear();
       triggerSessionChange();
       navigate({ to: redirect || '/', replace: true });
+    },
+    onError: (err) => {
+      posthog.captureException(err);
     },
   });
 

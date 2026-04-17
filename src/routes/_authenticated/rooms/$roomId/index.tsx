@@ -5,6 +5,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react';
 import {
   useMutation,
   useQuery,
@@ -315,6 +316,8 @@ function LobbyView({
   onUpdate: () => void;
 }) {
   const [copiedBotId, setCopiedBotId] = useState<string | null>(null);
+  const posthog = usePostHog();
+  const fillBotsEnabled = useFeatureFlagEnabled('fill-room-with-bots');
   const selectPowerMutation = useMutation(
     orpcUtils.room.selectPower.mutationOptions(),
   );
@@ -342,6 +345,7 @@ function LobbyView({
 
   const handleSelectPower = async (power: Power) => {
     await selectPowerMutation.mutateAsync({ roomId, power });
+    posthog.capture('power_selected', { power, room_id: roomId });
     onUpdate();
   };
 
@@ -352,11 +356,15 @@ function LobbyView({
 
   const handleSetReady = async (ready: boolean) => {
     await setReadyMutation.mutateAsync({ roomId, ready });
+    if (ready) {
+      posthog.capture('player_marked_ready', { room_id: roomId });
+    }
     onUpdate();
   };
 
   const handleStartGame = async () => {
     await startGameMutation.mutateAsync({ roomId });
+    posthog.capture('game_started', { room_id: roomId });
     onUpdate();
   };
 
@@ -659,7 +667,7 @@ function LobbyView({
                   {myPlayer?.isReady ? 'Mark not ready' : 'Mark ready'}
                 </Button>
 
-                {isCreator && activePlayers.length < 7 ? (
+                {fillBotsEnabled && isCreator && activePlayers.length < 7 ? (
                   <Button
                     className="h-12 w-full rounded-full border border-black/10 bg-white/72 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
                     disabled={fillBotsMutation.isPending}

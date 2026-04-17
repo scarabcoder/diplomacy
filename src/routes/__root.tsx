@@ -11,6 +11,7 @@ import {
   useRouter,
 } from '@tanstack/react-router';
 import { type ReactNode, StrictMode, useEffect } from 'react';
+import { PostHogProvider } from 'posthog-js/react';
 import { orpcUtils } from '@/rpc/react.ts';
 // @ts-ignore
 import appCss from '../styles/app.css?url';
@@ -72,9 +73,22 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           <HeadContent />
         </head>
         <body suppressHydrationWarning>
-          <div id="app" suppressHydrationWarning>
-            {children}
-          </div>
+          <PostHogProvider
+            apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN!}
+            options={{
+              api_host: '/ingest',
+              ui_host:
+                import.meta.env.VITE_PUBLIC_POSTHOG_HOST ||
+                'https://us.posthog.com',
+              defaults: '2025-05-24',
+              capture_exceptions: true,
+              debug: import.meta.env.DEV,
+            }}
+          >
+            <div id="app" suppressHydrationWarning>
+              {children}
+            </div>
+          </PostHogProvider>
           <Scripts />
         </body>
       </html>

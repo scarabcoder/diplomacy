@@ -6,10 +6,27 @@ const handler = await import('./dist/server/server.js').then(
   (m) => m.default.fetch,
 );
 
+const POSTHOG_INGEST_HOST = 'https://us.i.posthog.com';
+
 Bun.serve({
   port: parseInt(process.env.PORT!) || 3000,
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith('/ingest/') || url.pathname === '/ingest') {
+      const upstream = new URL(
+        url.pathname.replace(/^\/ingest/, '') + url.search,
+        POSTHOG_INGEST_HOST,
+      );
+      const headers = new Headers(request.headers);
+      headers.set('host', upstream.host);
+      return fetch(upstream, {
+        method: request.method,
+        headers,
+        body: request.body,
+        redirect: 'manual',
+      });
+    }
 
     // Serve static files from dist/client
     if (

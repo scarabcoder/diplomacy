@@ -17,6 +17,7 @@ import {
   Sword,
   Users,
 } from 'lucide-react';
+import { usePostHog } from 'posthog-js/react';
 import {
   CommandPanel,
   InviteCode,
@@ -62,6 +63,7 @@ export const Route = createFileRoute('/_authenticated/')({
 function HomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const posthog = usePostHog();
   const { data: session } = useSuspenseQuery(
     orpcUtils.auth.getUserSession.queryOptions(),
   );
@@ -115,6 +117,10 @@ function HomePage() {
     const room = await createRoomMutation.mutateAsync({
       name: roomName.trim(),
     });
+    posthog.capture('room_created', {
+      room_name: roomName.trim(),
+      room_id: room.id,
+    });
     setRoomName('');
     navigate({ to: '/rooms/$roomId', params: { roomId: room.id } });
   };
@@ -124,11 +130,17 @@ function HomePage() {
     const result = await joinRoomMutation.mutateAsync({
       code: joinCode.toUpperCase(),
     });
+    posthog.capture('room_joined', {
+      room_code: joinCode.toUpperCase(),
+      room_id: result.room.id,
+    });
     setJoinCode('');
     navigate({ to: '/rooms/$roomId', params: { roomId: result.room.id } });
   };
 
   const handleLogout = async () => {
+    posthog.capture('user_signed_out');
+    posthog.reset();
     await authClient.signOut();
     queryClient.clear();
     localStorage.setItem('sessionChange', Date.now().toString());

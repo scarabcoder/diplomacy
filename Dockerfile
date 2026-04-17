@@ -26,6 +26,11 @@ COPY . .
 # Remove the rust source (already built) to keep the layer small
 RUN rm -rf rust/diplomacy-wasm/src rust/diplomacy-wasm/Cargo.* rust/diplomacy-wasm/Cargo.lock
 
+ARG VITE_PUBLIC_POSTHOG_PROJECT_TOKEN
+ARG VITE_PUBLIC_POSTHOG_HOST
+ENV VITE_PUBLIC_POSTHOG_PROJECT_TOKEN=$VITE_PUBLIC_POSTHOG_PROJECT_TOKEN
+ENV VITE_PUBLIC_POSTHOG_HOST=$VITE_PUBLIC_POSTHOG_HOST
+
 # Build the Vite app (skip build:rust since WASM is already built)
 RUN bunx --bun vite build
 

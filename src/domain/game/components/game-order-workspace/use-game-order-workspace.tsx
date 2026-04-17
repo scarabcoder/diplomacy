@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { usePostHog } from 'posthog-js/react';
 import {
   ArrowRight,
   Castle,
@@ -78,6 +79,7 @@ export function useGameOrderWorkspace({
   mySubmission,
   onSubmitted,
 }: GameOrderWorkspaceProps) {
+  const posthog = usePostHog();
   const positions = turn.unitPositions;
   const supplyCenters = turn.supplyCenters;
   const myUnits = Object.entries(positions)
@@ -637,6 +639,13 @@ export function useGameOrderWorkspace({
       await submitBuildsMutation.mutateAsync({ roomId, builds });
     }
 
+    posthog.capture('orders_submitted', {
+      phase: turn.phase,
+      power: myPower,
+      room_id: roomId,
+      year: turn.year,
+      season: turn.season,
+    });
     setDidSubmit(true);
     onSubmitted();
     setActiveFlyout('submit');

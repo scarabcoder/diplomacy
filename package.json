@@ -68,6 +68,8 @@
     "pg": "latest",
     "pino": "latest",
     "pino-pretty": "latest",
+    "posthog-js": "^1.369.2",
+    "posthog-node": "^5.29.2",
     "react": "latest",
     "react-dom": "latest",
     "react-zoom-pan-pinch": "^4.0.3",

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowRight, ShieldCheck, UserRound } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { usePostHog } from 'posthog-js/react';
 import * as z from 'zod/v4';
 import { AuthFrame } from '@/components/surfaces/auth-frame.tsx';
 import { SectionKicker, StatusSeal } from '@/components/surfaces/war-room.tsx';
@@ -39,6 +40,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { redirect } = Route.useSearch();
+  const posthog = usePostHog();
 
   const onSuccess = () => {
     queryClient.clear();
@@ -52,7 +54,19 @@ function LoginPage() {
     error: loginError,
   } = useMutation({
     mutationFn: signInEmail,
-    onSuccess,
+    onSuccess: (data) => {
+      if (data?.user?.id) {
+        posthog.identify(data.user.id, {
+          email: data.user.email,
+          name: data.user.name,
+        });
+      }
+      posthog.capture('user_signed_in', { method: 'email' });
+      onSuccess();
+    },
+    onError: (error) => {
+      posthog.captureException(error);
+    },
   });
 
   const loginForm = useAppForm({
