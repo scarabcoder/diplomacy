@@ -8,3 +8,4 @@ dist/
 analyze.html
 rust/diplomacy-wasm/pkg/
 rust/diplomacy-wasm/target/
+.idea/
