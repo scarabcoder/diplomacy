@@ -250,6 +250,8 @@ export function RoomMessagesPanel({
   onClose,
   shortcutRequest,
   typingByThread,
+  selectedThreadId,
+  onSelectThread,
 }: {
   roomId: string;
   roomStatus: 'lobby' | 'playing' | 'completed' | 'abandoned';
@@ -259,9 +261,10 @@ export function RoomMessagesPanel({
   onClose: () => void;
   shortcutRequest: { key: number; participantPlayerIds: string[] };
   typingByThread: Map<string, string[]>;
+  selectedThreadId: string | null;
+  onSelectThread: (threadId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [mobileShowList, setMobileShowList] = useState(true);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [composerSelection, setComposerSelection] = useState<string[]>([]);
@@ -328,7 +331,7 @@ export function RoomMessagesPanel({
             input: { roomId },
           }).queryKey,
         });
-        setSelectedThreadId(result.thread.id);
+        onSelectThread(result.thread.id);
         setIsComposerOpen(false);
       },
     }),
@@ -361,6 +364,11 @@ export function RoomMessagesPanel({
           queryKey: orpcUtils.message.listThreads.queryOptions({
             input: { roomId },
           }).queryKey,
+        });
+        await queryClient.invalidateQueries({
+          queryKey:
+            orpcUtils.notification.getUnreadMessageCount.queryOptions()
+              .queryKey,
         });
         if (selectedThreadId) {
           await queryClient.invalidateQueries({
@@ -401,21 +409,6 @@ export function RoomMessagesPanel({
   }, [threadsQuery.data]);
   const activeThread = activeThreadQuery.data?.thread ?? null;
   const activeMessages = activeThreadQuery.data?.messages ?? [];
-  const firstThreadId = threads[0]?.id ?? null;
-
-  useEffect(() => {
-    if (
-      !isOpen ||
-      isComposerOpen ||
-      selectedThreadId ||
-      firstThreadId == null ||
-      (mobileShowList && window.matchMedia('(max-width: 639px)').matches)
-    ) {
-      return;
-    }
-
-    setSelectedThreadId(firstThreadId);
-  }, [firstThreadId, isComposerOpen, isOpen, mobileShowList, selectedThreadId]);
 
   useEffect(() => {
     if (
@@ -531,7 +524,7 @@ export function RoomMessagesPanel({
             }}
             onCloseComposer={() => setIsComposerOpen(false)}
             onSelectThread={(threadId) => {
-              setSelectedThreadId(threadId);
+              onSelectThread(threadId);
               setIsComposerOpen(false);
             }}
             onTogglePlayerSelection={(playerId) => {
@@ -586,7 +579,7 @@ export function RoomMessagesPanel({
             }}
             onCloseComposer={() => setIsComposerOpen(false)}
             onSelectThread={(threadId) => {
-              setSelectedThreadId(threadId);
+              onSelectThread(threadId);
               setIsComposerOpen(false);
               setMobileShowList(false);
             }}
@@ -603,7 +596,7 @@ export function RoomMessagesPanel({
             onOpenProposal={(payload) => setOpenProposal(payload)}
             onOpenProposalComposer={() => setIsProposalComposerOpen(true)}
             onDeselectThread={() => {
-              setSelectedThreadId(null);
+              onSelectThread(null);
               setMobileShowList(true);
             }}
           />

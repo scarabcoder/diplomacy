@@ -12,6 +12,13 @@ void import('@/domain/bot/brain/bot-recovery.ts').then(
   },
 );
 
+// Start the notification outbox worker once per server process
+void import('@/domain/notification/worker.ts').then(
+  ({ startNotificationWorker }) => {
+    startNotificationWorker();
+  },
+);
+
 export const Route = createFileRoute('/api/rpc/$')({
   server: {
     handlers: {

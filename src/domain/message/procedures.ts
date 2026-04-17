@@ -40,6 +40,50 @@ import {
   canAccessMessages,
   canWriteMessages,
 } from './utils.ts';
+import {
+  cancelMessageNotificationsForReadThread,
+  enqueueMessageNotifications,
+} from '@/domain/notification/enqueue.ts';
+import { getMessageRecipientUserIds } from '@/domain/notification/recipients.ts';
+import { createLogger } from '@/lib/logger.ts';
+
+const messageNotificationLogger = createLogger('message-notifications');
+
+async function enqueueMessageRecipients(params: {
+  roomId: string;
+  threadId: string;
+  messageId: string;
+  senderPlayerId: string;
+}): Promise<void> {
+  try {
+    const recipientUserIds = await getMessageRecipientUserIds({
+      conversationId: params.threadId,
+      senderPlayerId: params.senderPlayerId,
+    });
+    messageNotificationLogger.info(
+      {
+        messageId: params.messageId,
+        threadId: params.threadId,
+        roomId: params.roomId,
+        senderPlayerId: params.senderPlayerId,
+        recipientCount: recipientUserIds.length,
+      },
+      'Resolved message recipients for notifications',
+    );
+    if (recipientUserIds.length === 0) return;
+    await enqueueMessageNotifications({
+      roomId: params.roomId,
+      threadId: params.threadId,
+      messageId: params.messageId,
+      recipientUserIds,
+    });
+  } catch (error) {
+    messageNotificationLogger.warn(
+      { error, ...params },
+      'Failed to enqueue message notifications',
+    );
+  }
+}
 
 const TYPING_THROTTLE_MS = 3_000;
 const typingTimestamps = new Map<string, number>();
@@ -692,6 +736,13 @@ export const sendMessage = authed
       );
     }
 
+    await enqueueMessageRecipients({
+      roomId: input.roomId,
+      threadId: input.threadId,
+      messageId: message!.id,
+      senderPlayerId: player.id,
+    });
+
     return {
       message: {
         id: message!.id,
@@ -830,6 +881,13 @@ export const sendOrderProposal = authed
       );
     }
 
+    await enqueueMessageRecipients({
+      roomId: input.roomId,
+      threadId: input.threadId,
+      messageId: message!.id,
+      senderPlayerId: player.id,
+    });
+
     return {
       message: {
         id: message!.id,
@@ -915,6 +973,14 @@ export const markThreadRead = authed
           eq(roomConversationParticipantTable.playerId, player.id),
         ),
       );
+
+    if (actor.type === 'user') {
+      await cancelMessageNotificationsForReadThread({
+        userId: actor.userId,
+        threadId: input.threadId,
+        readThroughAt: targetMessage.createdAt,
+      });
+    }
 
     publishMessageEvent(input.roomId, 'thread_read', input.threadId);
 

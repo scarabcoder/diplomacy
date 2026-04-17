@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { client } from '@/rpc/client.ts';
 import { orpcUtils } from '@/rpc/react.ts';
+import { dispatchInTabNotification } from '@/domain/notification/hooks/use-in-tab-notifications.ts';
 
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 5000;
@@ -101,6 +102,11 @@ export function useRoomMessageSync(roomId: string, enabled = true) {
         }).queryKey,
       });
 
+      void queryClient.invalidateQueries({
+        queryKey:
+          orpcUtils.notification.getUnreadMessageCount.queryOptions().queryKey,
+      });
+
       if (!threadId) {
         return;
       }
@@ -144,6 +150,14 @@ export function useRoomMessageSync(roomId: string, enabled = true) {
           if (event.cause === 'typing' && event.playerId && event.threadId) {
             addTypingPlayer(event.threadId, event.playerId);
             return;
+          }
+
+          if (event.cause === 'message_sent') {
+            dispatchInTabNotification({
+              type: 'message',
+              roomId,
+              threadId: event.threadId,
+            });
           }
 
           invalidateRoomMessageQueries(event.threadId);

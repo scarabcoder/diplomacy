@@ -50,6 +50,11 @@ import {
   getMyOrdersSchema,
 } from './schema.ts';
 import { publishRoomEvent } from '@/domain/room/realtime.ts';
+import { enqueuePhaseResultNotifications } from '@/domain/notification/enqueue.ts';
+import { getPhaseResultRecipientUserIds } from '@/domain/notification/recipients.ts';
+import { createLogger } from '@/lib/logger.ts';
+
+const phaseNotificationLogger = createLogger('phase-notifications');
 
 // --- Helper: get room, turn, and player context ---
 async function getGameContext(roomId: string, actor: RpcActor) {
@@ -230,15 +235,38 @@ async function createPhaseResult(params: {
     dislodgedUnits: params.dislodgedUnits,
   });
 
-  await database.insert(gamePhaseResultTable).values({
-    roomId: params.roomId,
-    turnId: params.turn.id,
-    turnNumber: params.turn.turnNumber,
-    year: params.turn.year,
-    season: params.turn.season,
-    phase: params.turn.phase,
-    payload,
-  });
+  const [inserted] = await database
+    .insert(gamePhaseResultTable)
+    .values({
+      roomId: params.roomId,
+      turnId: params.turn.id,
+      turnNumber: params.turn.turnNumber,
+      year: params.turn.year,
+      season: params.turn.season,
+      phase: params.turn.phase,
+      payload,
+    })
+    .returning();
+
+  if (inserted) {
+    try {
+      const recipientUserIds = await getPhaseResultRecipientUserIds({
+        roomId: params.roomId,
+      });
+      if (recipientUserIds.length > 0) {
+        await enqueuePhaseResultNotifications({
+          roomId: params.roomId,
+          phaseResultId: inserted.id,
+          recipientUserIds,
+        });
+      }
+    } catch (error) {
+      phaseNotificationLogger.warn(
+        { error, roomId: params.roomId, phaseResultId: inserted.id },
+        'Failed to enqueue phase result notifications',
+      );
+    }
+  }
 }
 
 function getTurnDislodgedUnits(

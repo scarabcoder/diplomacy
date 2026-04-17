@@ -17,6 +17,7 @@ import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as ApiRpcSplatRouteImport } from './routes/api/rpc/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedRoomsRoomIdRouteRouteImport } from './routes/_authenticated/rooms/$roomId/route'
 import { Route as AuthenticatedRoomsRoomIdIndexRouteImport } from './routes/_authenticated/rooms/$roomId/index'
 import { Route as AuthenticatedRoomsRoomIdBotsPlayerIdRouteImport } from './routes/_authenticated/rooms/$roomId/bots/$playerId'
@@ -59,6 +60,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSettingsNotificationsRoute =
+  AuthenticatedSettingsNotificationsRouteImport.update({
+    id: '/settings/notifications',
+    path: '/settings/notifications',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRoomsRoomIdRouteRoute =
   AuthenticatedRoomsRoomIdRouteRouteImport.update({
     id: '/rooms/$roomId',
@@ -84,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof AuthRegisterRoute
   '/api/mcp': typeof ApiMcpRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteRouteWithChildren
+  '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
   '/rooms/$roomId/': typeof AuthenticatedRoomsRoomIdIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesByTo {
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
   '/api/mcp': typeof ApiMcpRoute
+  '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdIndexRoute
@@ -108,6 +117,7 @@ export interface FileRoutesById {
   '/api/mcp': typeof ApiMcpRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteRouteWithChildren
+  '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
   '/_authenticated/rooms/$roomId/': typeof AuthenticatedRoomsRoomIdIndexRoute
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/api/mcp'
     | '/rooms/$roomId'
+    | '/settings/notifications'
     | '/api/auth/$'
     | '/api/rpc/$'
     | '/rooms/$roomId/'
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/api/mcp'
+    | '/settings/notifications'
     | '/api/auth/$'
     | '/api/rpc/$'
     | '/rooms/$roomId'
@@ -144,6 +156,7 @@ export interface FileRouteTypes {
     | '/api/mcp'
     | '/_authenticated/'
     | '/_authenticated/rooms/$roomId'
+    | '/_authenticated/settings/notifications'
     | '/api/auth/$'
     | '/api/rpc/$'
     | '/_authenticated/rooms/$roomId/'
@@ -216,6 +229,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/settings/notifications': {
+      id: '/_authenticated/settings/notifications'
+      path: '/settings/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/rooms/$roomId': {
       id: '/_authenticated/rooms/$roomId'
       path: '/rooms/$roomId'
@@ -274,12 +294,15 @@ const AuthenticatedRoomsRoomIdRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedRoomsRoomIdRouteRoute: typeof AuthenticatedRoomsRoomIdRouteRouteWithChildren
+  AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedRoomsRoomIdRouteRoute:
     AuthenticatedRoomsRoomIdRouteRouteWithChildren,
+  AuthenticatedSettingsNotificationsRoute:
+    AuthenticatedSettingsNotificationsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

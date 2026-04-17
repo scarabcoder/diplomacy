@@ -1,5 +1,8 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { orpcUtils } from '@/rpc/react.ts';
+import { EnablePushPrompt } from '@/domain/notification/components/EnablePushPrompt.tsx';
+import { useFaviconBadge } from '@/domain/notification/hooks/use-favicon-badge.ts';
+import { useInTabNotifications } from '@/domain/notification/hooks/use-in-tab-notifications.ts';
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ context, location }) => {
@@ -21,5 +24,12 @@ export const Route = createFileRoute('/_authenticated')({
 });
 
 function AuthenticatedLayout() {
-  return <Outlet />;
+  useInTabNotifications();
+  useFaviconBadge();
+  return (
+    <>
+      <Outlet />
+      <EnablePushPrompt />
+    </>
+  );
 }

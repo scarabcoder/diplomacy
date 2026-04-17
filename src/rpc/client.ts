@@ -1,11 +1,8 @@
 import { createORPCClient } from '@orpc/client';
 import { RPCLink } from '@orpc/client/fetch';
 import type { RouterClient } from '@orpc/server';
-import { RPCHandler } from '@orpc/server/fetch';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest, getRequestHeaders } from '@tanstack/react-start/server';
-import { handleLoggedRPCRequest } from '@/rpc/logged-rpc-handler.ts';
-import { appRouter } from '@/rpc/router.ts';
 import type { AppRouter } from '@/rpc/router.ts';
 
 function firstHeaderValue(value: string | null): string | null {
@@ -52,39 +49,13 @@ const getRpcHeaders = createIsomorphicFn()
     return {};
   });
 
-const serverRpcHandler = new RPCHandler(appRouter);
-
 const rpcFetch = createIsomorphicFn()
   .server(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const headers = new Headers(init?.headers);
-
-      for (const [key, value] of Object.entries(getRpcHeaders())) {
-        headers.set(key, value);
-      }
-
-      const request =
-        input instanceof Request
-          ? input
-          : new Request(input.toString(), {
-              ...init,
-              headers,
-            });
-
-      const { response, matched } = await handleLoggedRPCRequest(
-        serverRpcHandler,
-        request,
-        'server-client',
+      const { handleServerRpcFetch } = await import(
+        '@/rpc/server-rpc-fetch.ts'
       );
-
-      if (matched) {
-        return response;
-      }
-
-      return new Response(JSON.stringify({ error: 'No route was found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return handleServerRpcFetch(input, init, getRpcHeaders());
     },
   )
   .client(

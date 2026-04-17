@@ -12,7 +12,12 @@ Bun.serve({
     const url = new URL(request.url);
 
     // Serve static files from dist/client
-    if (url.pathname.startsWith('/assets/') || url.pathname === '/favicon.ico') {
+    if (
+      url.pathname.startsWith('/assets/') ||
+      url.pathname === '/favicon.ico' ||
+      url.pathname === '/favicon.svg' ||
+      url.pathname === '/service-worker.js'
+    ) {
       const filePath = join(distClientDir, url.pathname);
       const file = Bun.file(filePath);
 
@@ -21,7 +26,12 @@ Bun.serve({
           headers: {
             'Cache-Control': url.pathname.startsWith('/assets/')
               ? 'public, max-age=31536000, immutable'
-              : 'public, max-age=3600',
+              : url.pathname === '/service-worker.js'
+                ? 'no-cache'
+                : 'public, max-age=3600',
+            ...(url.pathname === '/service-worker.js'
+              ? { 'Service-Worker-Allowed': '/' }
+              : {}),
           },
         });
       }

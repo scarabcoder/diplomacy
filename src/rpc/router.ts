@@ -4,6 +4,7 @@ import { roomRouter } from '@/domain/room/router.ts';
 import { gameRouter } from '@/domain/game/router.ts';
 import { messageRouter } from '@/domain/message/router.ts';
 import { orderRouter } from '@/domain/order/router.ts';
+import { notificationRouter } from '@/domain/notification/router.ts';
 
 export const appRouter = {
   auth: authRouter,
@@ -12,6 +13,7 @@ export const appRouter = {
   game: gameRouter,
   message: messageRouter,
   order: orderRouter,
+  notification: notificationRouter,
 };
 
 export type AppRouter = typeof appRouter;

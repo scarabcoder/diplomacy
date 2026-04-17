@@ -8,6 +8,7 @@ import {
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowRight,
+  Bell,
   DoorOpen,
   Loader2,
   LogOut,
@@ -155,14 +156,26 @@ function HomePage() {
               </div>
             </div>
 
-            <Button
-              className="h-11 self-start rounded-full border border-black/10 bg-white/70 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white sm:self-auto"
-              onClick={handleLogout}
-              variant="outline"
-            >
-              <LogOut className="size-4" />
-              Sign out
-            </Button>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <Button
+                asChild
+                className="h-11 rounded-full border border-black/10 bg-white/70 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
+                variant="outline"
+              >
+                <Link to="/settings/notifications">
+                  <Bell className="size-4" />
+                  Notifications
+                </Link>
+              </Button>
+              <Button
+                className="h-11 rounded-full border border-black/10 bg-white/70 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
+                onClick={handleLogout}
+                variant="outline"
+              >
+                <LogOut className="size-4" />
+                Sign out
+              </Button>
+            </div>
           </div>
         </ParchmentPanel>
 

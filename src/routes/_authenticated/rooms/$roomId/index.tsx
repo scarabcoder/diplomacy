@@ -81,6 +81,9 @@ const powerMeta: Record<Power, { theater: string; palette: string }> = {
 };
 
 export const Route = createFileRoute('/_authenticated/rooms/$roomId/')({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
+    thread: typeof search.thread === 'string' ? search.thread : undefined,
+  }),
   loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(
       orpcUtils.room.getRoom.queryOptions({ input: { roomId: params.roomId } }),
@@ -91,8 +94,35 @@ export const Route = createFileRoute('/_authenticated/rooms/$roomId/')({
 
 function RoomPage() {
   const { roomId } = Route.useParams();
+  const { thread: selectedThreadId = null } = Route.useSearch();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
+  const [isMessagesOpenLocal, setIsMessagesOpenLocal] = useState(false);
+  const isMessagesOpen = isMessagesOpenLocal || selectedThreadId !== null;
+
+  const setSelectedThreadId = (threadId: string | null) => {
+    void navigate({
+      to: '/rooms/$roomId',
+      params: { roomId },
+      search: { thread: threadId ?? undefined },
+      replace: true,
+    });
+  };
+
+  const openMessages = () => setIsMessagesOpenLocal(true);
+  const closeMessages = () => {
+    setIsMessagesOpenLocal(false);
+    if (selectedThreadId !== null) {
+      setSelectedThreadId(null);
+    }
+  };
+  const toggleMessages = () => {
+    if (isMessagesOpen) {
+      closeMessages();
+    } else {
+      openMessages();
+    }
+  };
   const [latestCreatedBots, setLatestCreatedBots] = useState<
     Array<{
       botId: string;
@@ -153,7 +183,7 @@ function RoomPage() {
       key: current.key + 1,
       participantPlayerIds: [playerId],
     }));
-    setIsMessagesOpen(true);
+    openMessages();
   };
 
   const messagesPanel = (
@@ -163,9 +193,11 @@ function RoomPage() {
       players={players}
       myPlayer={myPlayer ?? null}
       isOpen={isMessagesOpen}
-      onClose={() => setIsMessagesOpen(false)}
+      onClose={closeMessages}
       shortcutRequest={messageShortcutRequest}
       typingByThread={typingByThread}
+      selectedThreadId={selectedThreadId}
+      onSelectThread={setSelectedThreadId}
     />
   );
 
@@ -181,7 +213,7 @@ function RoomPage() {
           onUpdate={invalidateRoom}
           unreadThreadCount={unreadThreadCount}
           isMessagesOpen={isMessagesOpen}
-          onToggleMessages={() => setIsMessagesOpen((current) => !current)}
+          onToggleMessages={toggleMessages}
           onMessagePlayer={handleMessagePlayer}
         />
         {messagesPanel}
@@ -222,7 +254,7 @@ function RoomPage() {
               <LobbyCodeActions
                 canAccessMessages={canAccessMessages}
                 code={room.code}
-                onOpenMessages={() => setIsMessagesOpen(true)}
+                onOpenMessages={openMessages}
                 unreadThreadCount={unreadThreadCount}
               />
             </div>
