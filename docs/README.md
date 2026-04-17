@@ -17,7 +17,7 @@
 | Forms | TanStack Form |
 | Logging | Pino |
 | MCP | Model Context Protocol server |
-| AI | Claude via `@tanstack/ai-anthropic` |
+| AI | TanStack AI via `@tanstack/ai-anthropic` and `@tanstack/ai-openai` |
 | Testing | Bun test runner |
 | Linting | oxlint |
 | Formatting | oxfmt |

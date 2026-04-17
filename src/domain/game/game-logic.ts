@@ -15,6 +15,7 @@ import type {
 import {
   SUPPLY_CENTERS,
   countSupplyCenters,
+  countUnits,
 } from '@/domain/game/engine/map-data.ts';
 import { calculateBuildCounts } from '@/domain/game/engine/resolve-builds.ts';
 import {
@@ -168,6 +169,10 @@ export async function advancePhase(
       return;
     }
 
+    // Eliminate any player now left with no supply centers and no units
+    // (e.g. had units at end of Fall but all were forcibly disbanded).
+    await updatePlayerSupplyCounts(roomId, updatedOwnership, resolvedPositions);
+
     await createNextTurn(
       roomId,
       currentTurn.turnNumber + 1,
@@ -205,7 +210,7 @@ async function handleEndOfFall(
   const needsBuildPhase = buildCounts.some((bc) => bc.count !== 0);
 
   // Update player supply center counts
-  await updatePlayerSupplyCounts(roomId, newOwnership);
+  await updatePlayerSupplyCounts(roomId, newOwnership, positions);
 
   if (needsBuildPhase) {
     await createNextPhase(
@@ -316,8 +321,10 @@ async function createNextPhase(
 async function updatePlayerSupplyCounts(
   roomId: string,
   supplyCenters: SupplyCenterOwnership,
+  positions: UnitPositions,
 ): Promise<void> {
   const counts = countSupplyCenters(supplyCenters);
+  const unitCounts = countUnits(positions);
   const players = await database
     .select()
     .from(gamePlayerTable)
@@ -328,13 +335,15 @@ async function updatePlayerSupplyCounts(
   for (const player of players) {
     if (player.power && !player.isSpectator) {
       const count = counts[player.power] ?? 0;
-      const shouldEliminate = count === 0 && player.status !== 'eliminated';
+      const unitCount = unitCounts[player.power] ?? 0;
+      const isEliminated = count === 0 && unitCount === 0;
+      const shouldEliminate = isEliminated && player.status !== 'eliminated';
 
       await database
         .update(gamePlayerTable)
         .set({
           supplyCenterCount: count,
-          status: count === 0 ? 'eliminated' : player.status,
+          status: isEliminated ? 'eliminated' : player.status,
         })
         .where(eq(gamePlayerTable.id, player.id));
 

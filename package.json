@@ -51,6 +51,7 @@
     "@tailwindcss/vite": "latest",
     "@tanstack/ai": "^0.10.2",
     "@tanstack/ai-anthropic": "^0.7.3",
+    "@tanstack/ai-openai": "^0.7.4",
     "@tanstack/react-form": "latest",
     "@tanstack/react-query": "latest",
     "@tanstack/react-router": "latest",

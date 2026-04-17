@@ -9,14 +9,33 @@ import {
   type ReactNode,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, MessageSquare, Plus, Send, Users, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Globe,
+  MessageSquare,
+  Plus,
+  Send,
+  Sparkles,
+  Users,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
-import type { Power } from '@/domain/game/engine/types.ts';
+import type {
+  DislodgedUnit,
+  Power,
+  SupplyCenterOwnership,
+  UnitPositions,
+} from '@/domain/game/engine/types.ts';
 import { PowerName } from '@/domain/game/power-presentation.tsx';
+import { OrderProposalComposerDialog } from '@/domain/game/components/OrderProposalComposerDialog.tsx';
 import { cn } from '@/lib/utils.ts';
 import { client } from '@/rpc/client.ts';
 import { orpcUtils } from '@/rpc/react.ts';
 import { describeArchivedReason } from '../utils.ts';
+import type { OrderProposalPayload } from '../schema.ts';
+import { OrderProposalDialog } from './OrderProposalDialog.tsx';
+import { ProposalMessageCard } from './ProposalMessageCard.tsx';
 
 const TYPING_THROTTLE_MS = 3_000;
 
@@ -31,7 +50,7 @@ type RoomMessagePlayer = {
 
 type ThreadSummary = {
   id: string;
-  kind: 'direct' | 'group';
+  kind: 'direct' | 'group' | 'global';
   status: 'active' | 'archived';
   archivedReason: 'participant_eliminated' | 'room_completed' | null;
   participantPlayerIds: string[];
@@ -101,6 +120,10 @@ function buildThreadTitle(
   currentPlayerId: string,
   roomStatus: 'lobby' | 'playing' | 'completed' | 'abandoned',
 ): ReactNode {
+  if (thread.kind === 'global') {
+    return 'Global Chat';
+  }
+
   const otherPlayers = thread.participantPlayerIds
     .filter((playerId) => playerId !== currentPlayerId)
     .map((playerId) => playersById.get(playerId))
@@ -144,6 +167,10 @@ function buildThreadSubtitle(
     );
   }
 
+  if (thread.kind === 'global') {
+    return 'Public — everyone in the room can read and post here.';
+  }
+
   return thread.participantPlayerIds
     .filter((playerId) => playerId !== currentPlayerId)
     .map((playerId, index) => (
@@ -172,7 +199,11 @@ function TypingIndicator({
   } else if (typingPlayers.length === 2) {
     const a = buildPlayerLabel(typingPlayers[0], roomStatus).primary;
     const b = buildPlayerLabel(typingPlayers[1], roomStatus).primary;
-    label = <>{a} and {b} are typing</>;
+    label = (
+      <>
+        {a} and {b} are typing
+      </>
+    );
   } else {
     label = <>{typingPlayers.length} players are typing</>;
   }
@@ -235,6 +266,12 @@ export function RoomMessagesPanel({
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [composerSelection, setComposerSelection] = useState<string[]>([]);
   const [draftBody, setDraftBody] = useState('');
+  const [openProposal, setOpenProposal] = useState<{
+    messageId: string;
+    senderPlayerId: string;
+    proposal: OrderProposalPayload;
+  } | null>(null);
+  const [isProposalComposerOpen, setIsProposalComposerOpen] = useState(false);
 
   const playersById = useMemo(
     () => new Map(players.map((player) => [player.id, player])),
@@ -273,6 +310,15 @@ export function RoomMessagesPanel({
       selectedThreadId != null &&
       !isComposerOpen,
   });
+
+  const gameStateQuery = useQuery({
+    ...orpcUtils.game.getGameState.queryOptions({ input: { roomId } }),
+    enabled: canAccessMessages && roomStatus === 'playing',
+  });
+  const currentTurn = gameStateQuery.data?.turn ?? null;
+  const canProposeOrdersInThread = Boolean(
+    currentTurn && currentTurn.phase === 'order_submission',
+  );
 
   const openOrCreateMutation = useMutation(
     orpcUtils.message.openOrCreateThread.mutationOptions({
@@ -347,7 +393,12 @@ export function RoomMessagesPanel({
     };
   }, [selectedThreadId]);
 
-  const threads = threadsQuery.data?.items ?? [];
+  const threads = useMemo(() => {
+    const items = threadsQuery.data?.items ?? [];
+    const globalThreads = items.filter((thread) => thread.kind === 'global');
+    const otherThreads = items.filter((thread) => thread.kind !== 'global');
+    return [...globalThreads, ...otherThreads];
+  }, [threadsQuery.data]);
   const activeThread = activeThreadQuery.data?.thread ?? null;
   const activeMessages = activeThreadQuery.data?.messages ?? [];
   const firstThreadId = threads[0]?.id ?? null;
@@ -492,6 +543,9 @@ export function RoomMessagesPanel({
             }}
             onStartConversation={() => void handleStartConversation()}
             onSendMessage={() => void handleSendMessage()}
+            canProposeOrders={canProposeOrdersInThread}
+            onOpenProposal={(payload) => setOpenProposal(payload)}
+            onOpenProposalComposer={() => setIsProposalComposerOpen(true)}
           />
         </div>
       </div>
@@ -545,6 +599,9 @@ export function RoomMessagesPanel({
             }}
             onStartConversation={() => void handleStartConversation()}
             onSendMessage={() => void handleSendMessage()}
+            canProposeOrders={canProposeOrdersInThread}
+            onOpenProposal={(payload) => setOpenProposal(payload)}
+            onOpenProposalComposer={() => setIsProposalComposerOpen(true)}
             onDeselectThread={() => {
               setSelectedThreadId(null);
               setMobileShowList(true);
@@ -552,6 +609,55 @@ export function RoomMessagesPanel({
           />
         </div>
       </div>
+      {openProposal ? (
+        <OrderProposalDialog
+          proposal={openProposal.proposal}
+          messageId={openProposal.messageId}
+          senderLabel={
+            openProposal.senderPlayerId === myPlayer.id
+              ? 'You'
+              : buildPlayerLabel(
+                  playersById.get(openProposal.senderPlayerId),
+                  roomStatus,
+                ).primary
+          }
+          onClose={() => setOpenProposal(null)}
+        />
+      ) : null}
+      {isProposalComposerOpen && selectedThreadId && currentTurn ? (
+        <OrderProposalComposerDialog
+          roomId={roomId}
+          threadId={selectedThreadId}
+          turn={{
+            id: currentTurn.id,
+            turnNumber: currentTurn.turnNumber,
+            year: currentTurn.year,
+            season: currentTurn.season as 'spring' | 'fall',
+            phase: currentTurn.phase as
+              | 'order_submission'
+              | 'retreat_submission'
+              | 'build_submission',
+            unitPositions: currentTurn.unitPositions as UnitPositions,
+            supplyCenters: currentTurn.supplyCenters as SupplyCenterOwnership,
+            dislodgedUnits:
+              (currentTurn.dislodgedUnits as DislodgedUnit[] | null) ?? [],
+          }}
+          onClose={() => setIsProposalComposerOpen(false)}
+          onSent={async () => {
+            setIsProposalComposerOpen(false);
+            await queryClient.invalidateQueries({
+              queryKey: orpcUtils.message.getThread.queryOptions({
+                input: { roomId, threadId: selectedThreadId },
+              }).queryKey,
+            });
+            await queryClient.invalidateQueries({
+              queryKey: orpcUtils.message.listThreads.queryOptions({
+                input: { roomId },
+              }).queryKey,
+            });
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -586,6 +692,9 @@ function DrawerContent({
   onSendMessage,
   onDeselectThread,
   mobileShowList,
+  canProposeOrders,
+  onOpenProposal,
+  onOpenProposalComposer,
 }: {
   panelTitle: string;
   roomStatus: 'lobby' | 'playing' | 'completed' | 'abandoned';
@@ -596,6 +705,8 @@ function DrawerContent({
     id: string;
     senderPlayerId: string;
     body: string;
+    kind: 'text' | 'order_proposal';
+    proposalPayload: OrderProposalPayload | null;
     createdAt: Date;
   }>;
   unreadThreadCount: number;
@@ -621,10 +732,14 @@ function DrawerContent({
   onSendMessage: () => void;
   onDeselectThread?: () => void;
   mobileShowList?: boolean;
+  canProposeOrders: boolean;
+  onOpenProposal: (payload: {
+    messageId: string;
+    senderPlayerId: string;
+    proposal: OrderProposalPayload;
+  }) => void;
+  onOpenProposalComposer: () => void;
 }) {
-  const activeParticipants = (activeThread?.participantPlayerIds ?? [])
-    .map((playerId) => playersById.get(playerId))
-    .filter((player): player is RoomMessagePlayer => player != null);
   const isReadOnly = activeThread ? !activeThread.canSend : false;
 
   const typingPlayers = useMemo(() => {
@@ -781,8 +896,24 @@ function DrawerContent({
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <div className="inline-flex rounded-full border border-black/10 bg-white/72 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-soft)]">
-                        {thread.kind === 'direct' ? 'Direct' : 'Group'}
+                      <div
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]',
+                          thread.kind === 'global'
+                            ? 'border-[color:color-mix(in_oklab,var(--accent-oxblood)_30%,white_70%)] bg-[color:color-mix(in_oklab,var(--accent-oxblood)_10%,white_90%)] text-[color:var(--accent-oxblood)]'
+                            : 'border-black/10 bg-white/72 text-[color:var(--ink-soft)]',
+                        )}
+                      >
+                        {thread.kind === 'global' ? (
+                          <>
+                            <Globe className="size-3" />
+                            Global
+                          </>
+                        ) : thread.kind === 'direct' ? (
+                          'Direct'
+                        ) : (
+                          'Group'
+                        )}
                       </div>
                       {thread.status === 'archived' ? (
                         <div className="inline-flex rounded-full border border-[color:color-mix(in_oklab,var(--accent-brass)_36%,white_64%)] bg-[color:color-mix(in_oklab,var(--accent-brass)_14%,white_86%)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-strong)]">
@@ -946,10 +1077,17 @@ function DrawerContent({
                       </Button>
                     </div>
                   ) : null}
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-oxblood)]">
-                    {activeThread.kind === 'direct'
-                      ? 'Direct Thread'
-                      : 'Group Thread'}
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent-oxblood)]">
+                    {activeThread.kind === 'global' ? (
+                      <>
+                        <Globe className="size-3" />
+                        Global Chat · Public to all players
+                      </>
+                    ) : activeThread.kind === 'direct' ? (
+                      'Direct Thread'
+                    ) : (
+                      'Group Thread'
+                    )}
                   </div>
                   <div className="mt-1 text-lg font-semibold text-[color:var(--ink-strong)]">
                     {buildThreadTitle(
@@ -976,6 +1114,30 @@ function DrawerContent({
                         playersById.get(message.senderPlayerId),
                         roomStatus,
                       );
+
+                      if (
+                        message.kind === 'order_proposal' &&
+                        message.proposalPayload
+                      ) {
+                        return (
+                          <ProposalMessageCard
+                            key={message.id}
+                            proposal={message.proposalPayload}
+                            body={message.body}
+                            senderLabel={sender.primary}
+                            timestampLabel={formatTimestamp(message.createdAt)}
+                            isMine={isMine}
+                            onOpen={() =>
+                              onOpenProposal({
+                                messageId: message.id,
+                                senderPlayerId: message.senderPlayerId,
+                                proposal:
+                                  message.proposalPayload as OrderProposalPayload,
+                              })
+                            }
+                          />
+                        );
+                      }
 
                       return (
                         <div
@@ -1025,7 +1187,9 @@ function DrawerContent({
                     placeholder={
                       isReadOnly
                         ? 'This thread is archived.'
-                        : 'Write a private message to this thread.'
+                        : activeThread.kind === 'global'
+                          ? 'Post to global chat — visible to every player in the room.'
+                          : 'Write a private message to this thread.'
                     }
                     value={draftBody}
                   />
@@ -1033,19 +1197,35 @@ function DrawerContent({
                     <div className="text-xs text-[color:var(--ink-soft)]">
                       {isReadOnly
                         ? 'Read-only history'
-                        : 'Messages are room-private and immutable.'}
+                        : activeThread.kind === 'global'
+                          ? 'Public — everyone in the room can read this.'
+                          : 'Messages are room-private and immutable.'}
                     </div>
-                    <Button
-                      type="button"
-                      className="h-10 rounded-full text-xs font-semibold uppercase tracking-[0.16em]"
-                      disabled={
-                        isReadOnly || draftBody.trim().length === 0 || isBusy
-                      }
-                      onClick={onSendMessage}
-                    >
-                      <Send className="size-4" />
-                      Send
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {canProposeOrders ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 rounded-full text-xs font-semibold uppercase tracking-[0.16em]"
+                          disabled={isReadOnly || isBusy}
+                          onClick={onOpenProposalComposer}
+                        >
+                          <Sparkles className="size-4" />
+                          Propose
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        className="h-10 rounded-full text-xs font-semibold uppercase tracking-[0.16em]"
+                        disabled={
+                          isReadOnly || draftBody.trim().length === 0 || isBusy
+                        }
+                        onClick={onSendMessage}
+                      >
+                        <Send className="size-4" />
+                        Send
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -628,8 +628,17 @@ fn parse_unit_region(
     coast: Option<&str>,
     unit_type: UnitType,
 ) -> WasmResult<RegionKey> {
-    if unit_type == UnitType::Fleet && coast.is_some() {
-        parse_region(province, coast)
+    let normalized_coast = coast.and_then(|coast| {
+        let trimmed = coast.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+
+    if unit_type == UnitType::Fleet && normalized_coast.is_some() {
+        parse_region(province, normalized_coast)
     } else {
         parse_region(province, None)
     }

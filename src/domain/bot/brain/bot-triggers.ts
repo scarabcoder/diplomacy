@@ -2,14 +2,20 @@ import { and, eq, ne } from 'drizzle-orm';
 import { database } from '@/database/database.ts';
 import {
   gamePlayerTable,
+  gameRoomTable,
+  gameTurnTable,
   type GamePhaseEnum,
   type PowerEnum,
 } from '@/database/schema/game-schema.ts';
+import { getPowersRequiringSubmission } from '@/domain/game/submission-requirements.ts';
 import { roomConversationParticipantTable } from '@/database/schema/message-schema.ts';
 import { createLogger } from '@/lib/logger.ts';
 import { withTypingHeartbeat } from '@/domain/message/realtime.ts';
 import { activateBotBrain } from './bot-brain.ts';
-import { enqueueActivation, enqueueActivationDebounced } from './bot-activation.ts';
+import {
+  enqueueActivation,
+  enqueueActivationDebounced,
+} from './bot-activation.ts';
 import { submitFallbackOrders } from './bot-fallback.ts';
 
 const logger = createLogger('bot-triggers');
@@ -54,10 +60,51 @@ async function getActiveBotPlayers(roomId: string) {
       ),
     );
   logger.debug(
-    { roomId, botCount: bots.length, bots: bots.map((b) => ({ power: b.power, playerId: b.playerId })) },
+    {
+      roomId,
+      botCount: bots.length,
+      bots: bots.map((b) => ({ power: b.power, playerId: b.playerId })),
+    },
     'Found active bot players',
   );
   return bots;
+}
+
+async function getBotPlayersRequiringSubmission(roomId: string) {
+  const [room] = await database
+    .select({
+      currentTurnId: gameRoomTable.currentTurnId,
+    })
+    .from(gameRoomTable)
+    .where(eq(gameRoomTable.id, roomId));
+
+  if (!room?.currentTurnId) {
+    return [];
+  }
+
+  const [turn] = await database
+    .select()
+    .from(gameTurnTable)
+    .where(eq(gameTurnTable.id, room.currentTurnId));
+
+  if (!turn || turn.isComplete) {
+    return [];
+  }
+
+  const players = await database
+    .select()
+    .from(gamePlayerTable)
+    .where(eq(gamePlayerTable.roomId, roomId));
+  const requiredPowers = new Set(getPowersRequiringSubmission(turn, players));
+
+  if (requiredPowers.size === 0) {
+    return [];
+  }
+
+  const bots = await getActiveBotPlayers(roomId);
+  return bots.filter(
+    (bot) => bot.power && requiredPowers.has(bot.power as any),
+  );
 }
 
 /**
@@ -69,10 +116,13 @@ export function onGameStarted(roomId: string): void {
 
   void (async () => {
     try {
-      const bots = await getActiveBotPlayers(roomId);
+      const bots = await getBotPlayersRequiringSubmission(roomId);
 
       if (bots.length === 0) {
-        logger.debug({ roomId }, 'No active bots in room — skipping game_start trigger');
+        logger.debug(
+          { roomId },
+          'No active bots in room — skipping game_start trigger',
+        );
         return;
       }
 
@@ -83,12 +133,18 @@ export function onGameStarted(roomId: string): void {
 
       for (const bot of bots) {
         if (!bot.botId || !bot.power) {
-          logger.warn({ playerId: bot.playerId }, 'Skipping bot with missing botId or power');
+          logger.warn(
+            { playerId: bot.playerId },
+            'Skipping bot with missing botId or power',
+          );
           continue;
         }
 
         const tag = botTag(bot.power, bot.botId);
-        logger.debug({ ...tag, playerId: bot.playerId }, 'Enqueuing game_start activation');
+        logger.debug(
+          { ...tag, playerId: bot.playerId },
+          'Enqueuing game_start activation',
+        );
 
         void enqueueActivation(
           bot.playerId,
@@ -102,16 +158,29 @@ export function onGameStarted(roomId: string): void {
             }),
           tag,
         ).catch(async () => {
-          logger.warn({ ...tag }, 'game_start activation failed — submitting fallback orders');
+          logger.warn(
+            { ...tag },
+            'game_start activation failed — submitting fallback orders',
+          );
           try {
-            await submitFallbackOrders({ playerId: bot.playerId, roomId, power: bot.power as PowerEnum });
+            await submitFallbackOrders({
+              playerId: bot.playerId,
+              roomId,
+              power: bot.power as PowerEnum,
+            });
           } catch (fallbackErr) {
-            logger.error({ ...tag, err: fallbackErr }, 'Fallback order submission also failed');
+            logger.error(
+              { ...tag, err: fallbackErr },
+              'Fallback order submission also failed',
+            );
           }
         });
       }
     } catch (error) {
-      logger.error({ roomId, err: error }, 'Failed to trigger bot brains on game start');
+      logger.error(
+        { roomId, err: error },
+        'Failed to trigger bot brains on game start',
+      );
     }
   })();
 }
@@ -125,12 +194,18 @@ export function onMessageReceived(
   threadId: string,
   senderPlayerId: string,
 ): void {
-  logger.debug({ roomId, threadId, senderPlayerId }, 'onMessageReceived trigger fired');
+  logger.debug(
+    { roomId, threadId, senderPlayerId },
+    'onMessageReceived trigger fired',
+  );
 
   void (async () => {
     try {
       // Find bot participants in this conversation (excluding the sender)
-      logger.debug({ threadId, senderPlayerId }, 'Querying bot participants in thread...');
+      logger.debug(
+        { threadId, senderPlayerId },
+        'Querying bot participants in thread...',
+      );
       const participants = await database
         .select({
           playerId: roomConversationParticipantTable.playerId,
@@ -162,7 +237,13 @@ export function onMessageReceived(
       const senderIsBot = sender?.isBot ?? false;
 
       logger.info(
-        { roomId, threadId, senderPlayerId, senderIsBot, botParticipantCount: participants.length },
+        {
+          roomId,
+          threadId,
+          senderPlayerId,
+          senderIsBot,
+          botParticipantCount: participants.length,
+        },
         'Message received — notifying bot participants',
       );
 
@@ -171,9 +252,17 @@ export function onMessageReceived(
         if (senderIsBot) {
           const cooldownKey = `${participant.playerId}:${threadId}`;
           const lastTriggered = botReplyTimestamps.get(cooldownKey);
-          if (lastTriggered && Date.now() - lastTriggered < BOT_REPLY_COOLDOWN_MS) {
+          if (
+            lastTriggered &&
+            Date.now() - lastTriggered < BOT_REPLY_COOLDOWN_MS
+          ) {
             logger.debug(
-              { playerId: participant.playerId, threadId, cooldownKey, lastTriggeredAgoMs: Date.now() - lastTriggered },
+              {
+                playerId: participant.playerId,
+                threadId,
+                cooldownKey,
+                lastTriggeredAgoMs: Date.now() - lastTriggered,
+              },
               'Skipping bot-to-bot trigger — cooldown active',
             );
             continue;
@@ -187,7 +276,10 @@ export function onMessageReceived(
           .where(eq(gamePlayerTable.id, participant.playerId));
 
         if (!player?.botId || !player.power) {
-          logger.warn({ playerId: participant.playerId }, 'Skipping participant with missing botId or power');
+          logger.warn(
+            { playerId: participant.playerId },
+            'Skipping participant with missing botId or power',
+          );
           continue;
         }
 
@@ -213,7 +305,10 @@ export function onMessageReceived(
         );
       }
     } catch (error) {
-      logger.error({ roomId, threadId, err: error }, 'Failed to trigger bot brains on message');
+      logger.error(
+        { roomId, threadId, err: error },
+        'Failed to trigger bot brains on message',
+      );
     }
   })();
 }
@@ -226,32 +321,49 @@ export function onPhaseChanged(roomId: string, phase: GamePhaseEnum): void {
   logger.debug({ roomId, phase }, 'onPhaseChanged trigger fired');
 
   if (!SUBMISSION_PHASES.includes(phase)) {
-    logger.debug({ roomId, phase }, 'Phase is not a submission phase — skipping');
+    logger.debug(
+      { roomId, phase },
+      'Phase is not a submission phase — skipping',
+    );
     return;
   }
 
   void (async () => {
     try {
-      const bots = await getActiveBotPlayers(roomId);
+      const bots = await getBotPlayersRequiringSubmission(roomId);
 
       if (bots.length === 0) {
-        logger.debug({ roomId, phase }, 'No active bots in room — skipping phase_change trigger');
+        logger.debug(
+          { roomId, phase },
+          'No active bots in room — skipping phase_change trigger',
+        );
         return;
       }
 
       logger.info(
-        { roomId, phase, botCount: bots.length, powers: bots.map((b) => b.power) },
+        {
+          roomId,
+          phase,
+          botCount: bots.length,
+          powers: bots.map((b) => b.power),
+        },
         'Phase changed to submission phase — activating bot brains',
       );
 
       for (const bot of bots) {
         if (!bot.botId || !bot.power) {
-          logger.warn({ playerId: bot.playerId }, 'Skipping bot with missing botId or power');
+          logger.warn(
+            { playerId: bot.playerId },
+            'Skipping bot with missing botId or power',
+          );
           continue;
         }
 
         const tag = botTag(bot.power, bot.botId);
-        logger.debug({ ...tag, playerId: bot.playerId, phase }, 'Enqueuing phase_change activation');
+        logger.debug(
+          { ...tag, playerId: bot.playerId, phase },
+          'Enqueuing phase_change activation',
+        );
 
         void enqueueActivation(
           bot.playerId,
@@ -265,16 +377,29 @@ export function onPhaseChanged(roomId: string, phase: GamePhaseEnum): void {
             }),
           tag,
         ).catch(async () => {
-          logger.warn({ ...tag, phase }, 'phase_change activation failed — submitting fallback orders');
+          logger.warn(
+            { ...tag, phase },
+            'phase_change activation failed — submitting fallback orders',
+          );
           try {
-            await submitFallbackOrders({ playerId: bot.playerId, roomId, power: bot.power as PowerEnum });
+            await submitFallbackOrders({
+              playerId: bot.playerId,
+              roomId,
+              power: bot.power as PowerEnum,
+            });
           } catch (fallbackErr) {
-            logger.error({ ...tag, err: fallbackErr }, 'Fallback order submission also failed');
+            logger.error(
+              { ...tag, err: fallbackErr },
+              'Fallback order submission also failed',
+            );
           }
         });
       }
     } catch (error) {
-      logger.error({ roomId, phase, err: error }, 'Failed to trigger bot brains on phase change');
+      logger.error(
+        { roomId, phase, err: error },
+        'Failed to trigger bot brains on phase change',
+      );
     }
   })();
 }
@@ -285,9 +410,12 @@ export function onPhaseChanged(roomId: string, phase: GamePhaseEnum): void {
  * that resolves when all bots have submitted (or timed out).
  */
 export async function onFinalizePhase(roomId: string): Promise<void> {
-  logger.info({ roomId }, 'onFinalizePhase trigger fired — forcing all bot submissions');
+  logger.info(
+    { roomId },
+    'onFinalizePhase trigger fired — forcing all bot submissions',
+  );
 
-  const bots = await getActiveBotPlayers(roomId);
+  const bots = await getBotPlayersRequiringSubmission(roomId);
 
   if (bots.length === 0) {
     logger.info({ roomId }, 'No active bots to finalize');
@@ -304,7 +432,10 @@ export async function onFinalizePhase(roomId: string): Promise<void> {
     .filter((bot) => bot.botId && bot.power)
     .map((bot) => {
       const tag = botTag(bot.power!, bot.botId!);
-      logger.debug({ ...tag, playerId: bot.playerId }, 'Enqueuing finalize_phase activation');
+      logger.debug(
+        { ...tag, playerId: bot.playerId },
+        'Enqueuing finalize_phase activation',
+      );
 
       return enqueueActivation(
         bot.playerId,
@@ -318,16 +449,29 @@ export async function onFinalizePhase(roomId: string): Promise<void> {
           }),
         tag,
       ).catch(async () => {
-        logger.warn({ ...tag }, 'finalize_phase activation failed — submitting fallback orders');
+        logger.warn(
+          { ...tag },
+          'finalize_phase activation failed — submitting fallback orders',
+        );
         try {
-          await submitFallbackOrders({ playerId: bot.playerId, roomId, power: bot.power as PowerEnum });
+          await submitFallbackOrders({
+            playerId: bot.playerId,
+            roomId,
+            power: bot.power as PowerEnum,
+          });
         } catch (fallbackErr) {
-          logger.error({ ...tag, err: fallbackErr }, 'Fallback order submission also failed');
+          logger.error(
+            { ...tag, err: fallbackErr },
+            'Fallback order submission also failed',
+          );
         }
       });
     });
 
   await Promise.all(promises);
   const durationMs = Date.now() - startTime;
-  logger.info({ roomId, durationMs, botCount: bots.length }, 'All bot finalizations complete');
+  logger.info(
+    { roomId, durationMs, botCount: bots.length },
+    'All bot finalizations complete',
+  );
 }

@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, Trophy } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  ScrollText,
+  Trophy,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
 import {
   Card,
@@ -16,15 +24,9 @@ import type {
   PhaseResultItem,
   PhaseResultStatus,
 } from '@/domain/game/phase-results.ts';
-import { getBaseProvince } from '@/domain/game/lib/province-refs.ts';
 import { PowerName } from '@/domain/game/power-presentation.tsx';
-import { DiplomacyMap } from './DiplomacyMap.tsx';
-import { UnitMarker } from './UnitMarker.tsx';
-
-const LOOP_MOVE_MS = 3000;
-const LOOP_FADE_MS = 500;
-const LOOP_PAUSE_MS = 500;
-const LOOP_TOTAL_MS = LOOP_MOVE_MS + LOOP_FADE_MS + LOOP_PAUSE_MS;
+import { ReplayMap } from './phase-replay/ReplayMap.tsx';
+import type { ReplayMovingUnit } from './phase-replay/useLoopingReplay.ts';
 
 function statusClasses(status: PhaseResultStatus): string {
   if (status === 'success') {
@@ -74,34 +76,36 @@ function phaseLabel(phase: GamePhaseResultPayload['phase']): string {
   return 'Adjustments';
 }
 
-function easeInOut(progress: number): number {
-  return 0.5 - Math.cos(Math.PI * progress) / 2;
-}
-
-export function GamePhaseResultsScreen({
-  roomName,
-  roomCode,
-  phaseResultId,
-  payload,
-  onAcknowledged,
-}: {
+type GamePhaseResultsScreenProps = {
   roomName: string;
   roomCode: string;
   phaseResultId: string;
   payload: GamePhaseResultPayload;
-  onAcknowledged: () => void;
-}) {
+} & (
+  | { mode: 'live'; onAcknowledged: () => void }
+  | {
+      mode: 'history';
+      currentIndex: number;
+      totalCount: number;
+      onPrev: () => void;
+      onNext: () => void;
+      onClose: () => void;
+    }
+);
+
+export function GamePhaseResultsScreen(props: GamePhaseResultsScreenProps) {
+  const { roomName, roomCode, phaseResultId, payload, mode } = props;
   const acknowledgeMutation = useMutation(
     orpcUtils.game.acknowledgePhaseResult.mutationOptions(),
   );
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [loopElapsedMs, setLoopElapsedMs] = useState(0);
 
-  const movingUnits = useMemo(
+  const movingUnits: ReplayMovingUnit[] = useMemo(
     () =>
       payload.annotations
         .filter(
-          (annotation): annotation is PhaseResultAnnotation & {
+          (
+            annotation,
+          ): annotation is PhaseResultAnnotation & {
             to: string;
             power: NonNullable<PhaseResultAnnotation['power']>;
             unitType: NonNullable<PhaseResultAnnotation['unitType']>;
@@ -122,70 +126,7 @@ export function GamePhaseResultsScreen({
     [payload.annotations],
   );
 
-  const hasAnimation = !prefersReducedMotion && movingUnits.length > 0;
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const updatePreference = () => {
-      setPrefersReducedMotion(mediaQuery.matches);
-    };
-
-    updatePreference();
-    mediaQuery.addEventListener('change', updatePreference);
-
-    return () => {
-      mediaQuery.removeEventListener('change', updatePreference);
-    };
-  }, []);
-
-  useEffect(() => {
-    setLoopElapsedMs(0);
-
-    if (!hasAnimation) {
-      return;
-    }
-
-    let animationFrame = 0;
-    const startedAt = performance.now();
-
-    const tick = (now: number) => {
-      setLoopElapsedMs((now - startedAt) % LOOP_TOTAL_MS);
-      animationFrame = requestAnimationFrame(tick);
-    };
-
-    animationFrame = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(animationFrame);
-    };
-  }, [hasAnimation, phaseResultId]);
-
-  const isMoving = hasAnimation && loopElapsedMs < LOOP_MOVE_MS;
-  const isFading =
-    hasAnimation &&
-    loopElapsedMs >= LOOP_MOVE_MS &&
-    loopElapsedMs < LOOP_MOVE_MS + LOOP_FADE_MS;
-
-  const moveProgress = isMoving
-    ? easeInOut(loopElapsedMs / LOOP_MOVE_MS)
-    : isFading
-      ? 1
-      : 0;
-
-  const overlayOpacity = isMoving
-    ? 1
-    : isFading
-      ? 1 - easeInOut((loopElapsedMs - LOOP_MOVE_MS) / LOOP_FADE_MS)
-      : 0;
-
-  const hiddenSourceProvinces =
-    overlayOpacity > 0
-      ? movingUnits.map((unit) => getBaseProvince(unit.from))
-      : [];
+  const hasMovingUnits = movingUnits.length > 0;
 
   const beforeOverlayUnits =
     payload.phase === 'retreat_submission'
@@ -200,10 +141,10 @@ export function GamePhaseResultsScreen({
         }))
       : [];
 
-  const boardPositions = hasAnimation
+  const boardPositions = hasMovingUnits
     ? payload.boardBefore.positions
     : payload.boardAfter.positions;
-  const boardSupplyCenters = hasAnimation
+  const boardSupplyCenters = hasMovingUnits
     ? payload.boardBefore.supplyCenters
     : payload.boardAfter.supplyCenters;
 
@@ -222,8 +163,9 @@ export function GamePhaseResultsScreen({
                 {payload.headline}
               </h1>
               <p className="mt-2 text-sm text-slate-600">
-                Replay the adjudication, review every accepted move, and inspect
-                anything the engine rejected.
+                {mode === 'history'
+                  ? `Phase ${props.currentIndex + 1} of ${props.totalCount}`
+                  : 'Replay the adjudication, review every accepted move, and inspect anything the engine rejected.'}
               </p>
             </div>
             {payload.winnerPower ? (
@@ -239,78 +181,105 @@ export function GamePhaseResultsScreen({
             ) : null}
           </div>
 
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              className="rounded-full"
-              disabled={acknowledgeMutation.isPending}
-              onClick={async () => {
-                await acknowledgeMutation.mutateAsync({
-                  phaseResultId,
-                });
-                onAcknowledged();
-              }}
-            >
-              Continue
-              <ArrowRight className="ml-2 size-4" />
-            </Button>
-          </div>
+          {mode === 'live' ? (
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                className="rounded-full"
+                disabled={acknowledgeMutation.isPending}
+                onClick={async () => {
+                  await acknowledgeMutation.mutateAsync({
+                    phaseResultId,
+                  });
+                  props.onAcknowledged();
+                }}
+              >
+                Continue
+                <ArrowRight className="ml-2 size-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={props.onClose}
+              >
+                <ArrowLeft className="mr-2 size-4" />
+                Back to game
+              </Button>
+              <div className="flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white/70 px-1.5 py-1 shadow-sm">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  aria-label="Previous phase"
+                  disabled={props.currentIndex === 0}
+                  onClick={props.onPrev}
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="min-w-16 text-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                  {props.currentIndex + 1} / {props.totalCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  aria-label="Next phase"
+                  disabled={props.currentIndex === props.totalCount - 1}
+                  onClick={props.onNext}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(24rem,0.95fr)]">
           <Card className="overflow-hidden rounded-[2rem] border-black/10 bg-white/86 shadow-xl backdrop-blur">
             <CardContent className="p-0">
               <div className="relative h-[58vh] min-h-[32rem] overflow-hidden">
-                <DiplomacyMap
-                  key={phaseResultId}
+                <ReplayMap
+                  resetKey={phaseResultId}
                   positions={boardPositions}
                   supplyCenters={boardSupplyCenters}
                   annotations={payload.annotations}
+                  movingUnits={movingUnits}
                   overlayUnits={beforeOverlayUnits}
-                  hiddenUnitProvinces={hiddenSourceProvinces}
-                  renderOverlay={(mapData) =>
-                    movingUnits.length > 0 && overlayOpacity > 0 ? (
-                      <g
-                        className="moving-units"
-                        pointerEvents="none"
-                        opacity={overlayOpacity}
-                      >
-                        {movingUnits.map((unit) => {
-                          const start =
-                            mapData.centers[unit.from] ??
-                            mapData.centers[getBaseProvince(unit.from)];
-                          const end =
-                            mapData.centers[unit.to] ??
-                            mapData.centers[getBaseProvince(unit.to)];
-                          if (!start || !end) {
-                            return null;
-                          }
-
-                          const cx =
-                            start.x + (end.x - start.x) * moveProgress;
-                          const cy =
-                            start.y + (end.y - start.y) * moveProgress;
-
-                          return (
-                            <UnitMarker
-                              key={unit.id}
-                              cx={cx}
-                              cy={cy}
-                              power={unit.power}
-                              unitType={unit.unitType}
-                              isEmphasized
-                            />
-                          );
-                        })}
-                      </g>
-                    ) : null
-                  }
                 />
               </div>
             </CardContent>
           </Card>
 
           <div className="space-y-4">
+            {payload.historicalNarration ? (
+              <Card className="rounded-[2rem] border-black/10 bg-white/90 shadow-xl backdrop-blur">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
+                    <ScrollText className="size-5" />
+                    Historical narrator
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {payload.historicalNarration
+                    .split(/\n\s*\n/g)
+                    .filter((paragraph) => paragraph.trim().length > 0)
+                    .map((paragraph, index) => (
+                      <p
+                        key={`${phaseResultId}-historical-${index}`}
+                        className="text-sm leading-7 text-slate-700"
+                      >
+                        {paragraph.trim()}
+                      </p>
+                    ))}
+                </CardContent>
+              </Card>
+            ) : null}
             {alerts.map((alert) => (
               <Card
                 key={alert.id}

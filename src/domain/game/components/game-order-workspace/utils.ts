@@ -159,9 +159,7 @@ export function buildPlayersWindowSections({
 
   const rosterEntries = players.map((player) => {
     const submissionState: PlayersWindowEntry['submissionState'] =
-      shouldShowSubmissionState &&
-      !player.isSpectator &&
-      player.power
+      shouldShowSubmissionState && !player.isSpectator && player.power
         ? submittedPowers.has(player.power)
           ? 'submitted'
           : pendingPowers.has(player.power)

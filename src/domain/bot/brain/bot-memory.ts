@@ -20,9 +20,15 @@ export async function getOrCreateBrainState(params: {
   botId: string;
   power: PowerEnum;
 }): Promise<BrainState> {
-  const log = logger.child({ bot: params.power.toUpperCase(), botId: params.botId });
+  const log = logger.child({
+    bot: params.power.toUpperCase(),
+    botId: params.botId,
+  });
 
-  log.debug({ playerId: params.playerId }, 'Looking up existing brain state...');
+  log.debug(
+    { playerId: params.playerId },
+    'Looking up existing brain state...',
+  );
   const existing = await selectOne(
     database
       .select()
@@ -66,7 +72,10 @@ export async function updateStrategicPlan(
   playerId: string,
   plan: string,
 ): Promise<void> {
-  logger.debug({ playerId, planLength: plan.length }, 'Persisting strategic plan update');
+  logger.debug(
+    { playerId, planLength: plan.length },
+    'Persisting strategic plan update',
+  );
   await database
     .update(botBrainStateTable)
     .set({ strategicPlan: plan, updatedAt: new Date() })
@@ -79,7 +88,12 @@ export async function addObservation(
   observation: BotObservation,
 ): Promise<void> {
   logger.debug(
-    { playerId, turn: observation.turn, phase: observation.phase, noteLength: observation.note.length },
+    {
+      playerId,
+      turn: observation.turn,
+      phase: observation.phase,
+      noteLength: observation.note.length,
+    },
     'Persisting new observation',
   );
   await database
@@ -107,7 +121,10 @@ export async function setObservations(
       updatedAt: new Date(),
     })
     .where(eq(botBrainStateTable.playerId, playerId));
-  logger.debug({ playerId, count: observations.length }, 'Observations replaced');
+  logger.debug(
+    { playerId, count: observations.length },
+    'Observations replaced',
+  );
 }
 
 export async function updateRelationship(
@@ -116,7 +133,12 @@ export async function updateRelationship(
   assessment: BotRelationship,
 ): Promise<void> {
   logger.debug(
-    { playerId, targetPower: targetPower.toUpperCase(), trust: assessment.trust, stance: assessment.stance },
+    {
+      playerId,
+      targetPower: targetPower.toUpperCase(),
+      trust: assessment.trust,
+      stance: assessment.stance,
+    },
     'Persisting relationship update',
   );
   await database
@@ -126,7 +148,10 @@ export async function updateRelationship(
       updatedAt: new Date(),
     })
     .where(eq(botBrainStateTable.playerId, playerId));
-  logger.debug({ playerId, targetPower: targetPower.toUpperCase() }, 'Relationship persisted');
+  logger.debug(
+    { playerId, targetPower: targetPower.toUpperCase() },
+    'Relationship persisted',
+  );
 }
 
 export async function getFullBrainState(

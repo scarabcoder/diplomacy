@@ -1,0 +1,1 @@
+ALTER TYPE "public"."room_conversation_kind" ADD VALUE 'global';

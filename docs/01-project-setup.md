@@ -226,7 +226,12 @@ bun run db:seed          # Seed database with sample data (bun run seed.ts)
 | `PRETTY_LOGGING` | boolean | `false` | No | When `true`, enables `pino-pretty` for human-readable log output. Use in development only. |
 | `DATABASE_DEBUG` | boolean | `false` | No | When `true`, enables Drizzle ORM query logging. Logs all SQL queries to the console. |
 | `PORT` | number | `3000` | No | HTTP server listen port. |
-| `ANTHROPIC_MODEL` | string | `"claude-sonnet-4-5"` | No | AI model identifier used by the assistant feature. |
+| `BOT_AI_PROVIDER` | string | auto-detect / `"anthropic"` fallback | No | AI provider for bot players. Supported values: `anthropic`, `openai`. |
+| `ANTHROPIC_API_KEY` | string | -- | No | Required when `BOT_AI_PROVIDER=anthropic`. |
+| `OPENAI_API_KEY` | string | -- | No | Required when `BOT_AI_PROVIDER=openai`. |
+| `BOT_AI_MODEL` | string | provider-specific | No | Primary AI model used by bot players. |
+| `NARRATOR_AI_MODEL` | string | `BOT_AI_MODEL` | No | Optional override model used for historical turn narration. Falls back to `BOT_AI_MODEL` when unset. |
+| `BOT_AI_TAGLINE_MODEL` | string | provider-specific | No | Optional smaller model used to generate ephemeral bot activity taglines. |
 | `LOCAL_HTTPS_CERT_FILE` | string | `".cert/nehemiah.test.pem"` | No | Path to the TLS certificate file for local HTTPS development. Only read when `BASE_URL` starts with `https://`. |
 | `LOCAL_HTTPS_KEY_FILE` | string | `".cert/nehemiah.test-key.pem"` | No | Path to the TLS private key file for local HTTPS development. Only read when `BASE_URL` starts with `https://`. |
 

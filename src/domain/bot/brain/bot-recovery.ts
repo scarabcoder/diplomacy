@@ -9,13 +9,8 @@ import {
   gameTurnTable,
   type PowerEnum,
 } from '@/database/schema/game-schema.ts';
-import type {
-  DislodgedUnit,
-  Power,
-  SupplyCenterOwnership,
-  UnitPositions,
-} from '@/domain/game/engine/types.ts';
-import { calculateBuildCounts } from '@/domain/game/engine/resolve-builds.ts';
+import { getPowersRequiringSubmission } from '@/domain/game/submission-requirements.ts';
+import { publishRoomEvent } from '@/domain/room/realtime.ts';
 import { createLogger } from '@/lib/logger.ts';
 import { activateBotBrain } from './bot-brain.ts';
 import { enqueueActivation } from './bot-activation.ts';
@@ -73,13 +68,34 @@ export async function recoverPendingBotSubmissions(): Promise<void> {
       }
 
       // Find which powers have already submitted
-      const submittedPowers = await getSubmittedPowers(
-        turn.id,
-        phase,
-        turn.unitPositions as UnitPositions,
-        turn.supplyCenters as SupplyCenterOwnership,
-        (turn.dislodgedUnits as DislodgedUnit[] | null) ?? [],
+      const submittedPowers = await getSubmittedPowers(turn.id, phase);
+      const players = await database
+        .select()
+        .from(gamePlayerTable)
+        .where(eq(gamePlayerTable.roomId, room.roomId));
+      const requiredPowers = new Set(
+        getPowersRequiringSubmission(turn, players),
       );
+
+      const allSubmitted = [...requiredPowers].every((power) =>
+        submittedPowers.has(power),
+      );
+      if (allSubmitted) {
+        const { resolveTurnIfReady } =
+          await import('@/domain/order/procedures.ts');
+        const result = await resolveTurnIfReady({
+          roomId: room.roomId,
+          turnId: turn.id,
+        });
+        if (result.resolved) {
+          logger.info(
+            { roomId: room.roomId, phase, turnId: turn.id },
+            'Resolved already-complete submission phase during recovery',
+          );
+          publishRoomEvent(room.roomId, 'finalize_phase');
+        }
+        continue;
+      }
 
       // Find active bot players who haven't submitted
       const pendingBots = await database
@@ -102,6 +118,7 @@ export async function recoverPendingBotSubmissions(): Promise<void> {
         (bot) =>
           bot.power &&
           bot.botId &&
+          requiredPowers.has(bot.power as any) &&
           !submittedPowers.has(bot.power),
       );
 
@@ -132,7 +149,10 @@ export async function recoverPendingBotSubmissions(): Promise<void> {
             }),
           tag,
         ).catch(async () => {
-          logger.warn({ ...tag }, 'Recovery activation failed — submitting fallback orders');
+          logger.warn(
+            { ...tag },
+            'Recovery activation failed — submitting fallback orders',
+          );
           try {
             await submitFallbackOrders({
               playerId: bot.playerId,
@@ -140,7 +160,10 @@ export async function recoverPendingBotSubmissions(): Promise<void> {
               power: bot.power as PowerEnum,
             });
           } catch (fallbackErr) {
-            logger.error({ ...tag, err: fallbackErr }, 'Recovery fallback also failed');
+            logger.error(
+              { ...tag, err: fallbackErr },
+              'Recovery fallback also failed',
+            );
           }
         });
 
@@ -149,7 +172,10 @@ export async function recoverPendingBotSubmissions(): Promise<void> {
     }
 
     if (totalRecovered > 0) {
-      logger.info({ totalRecovered }, 'Bot recovery complete — activations enqueued');
+      logger.info(
+        { totalRecovered },
+        'Bot recovery complete — activations enqueued',
+      );
     } else {
       logger.info('No pending bot submissions found');
     }
@@ -161,9 +187,6 @@ export async function recoverPendingBotSubmissions(): Promise<void> {
 async function getSubmittedPowers(
   turnId: string,
   phase: string,
-  positions: UnitPositions,
-  supplyCenters: SupplyCenterOwnership,
-  dislodgedUnits: DislodgedUnit[],
 ): Promise<Set<string>> {
   if (phase === 'order_submission') {
     const rows = await database

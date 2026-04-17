@@ -54,25 +54,16 @@ export type PlayersWindowSections = {
   spectators: PlayersWindowEntry[];
 };
 
-export type MainSubmissionRecord = {
-  unitProvince: string;
-  orderType: 'hold' | 'move' | 'support' | 'convoy';
-  targetProvince: string | null;
-  supportedUnitProvince: string | null;
-  viaConvoy: boolean;
-};
-
-export type RetreatSubmissionRecord = {
-  unitProvince: string;
-  retreatTo: string | null;
-};
-
-export type BuildSubmissionRecord = {
-  action: 'build' | 'disband' | 'waive';
-  province: string;
-  unitType: 'army' | 'fleet' | null;
-  coast: string | null;
-};
+export type {
+  MainSubmissionRecord,
+  RetreatSubmissionRecord,
+  BuildSubmissionRecord,
+} from '@/domain/game/lib/submission-records.ts';
+import type {
+  MainSubmissionRecord,
+  RetreatSubmissionRecord,
+  BuildSubmissionRecord,
+} from '@/domain/game/lib/submission-records.ts';
 
 export type MySubmission =
   | {
@@ -173,6 +164,7 @@ export type GameOrderWorkspaceProps = {
   onToggleMessages: () => void;
   onMessagePlayer: (playerId: string) => void;
   onInspectBot?: (playerId: string) => void;
+  onOpenHistory?: () => void;
 };
 
 export type MainDraftMap = Record<string, MainOrderDraft>;

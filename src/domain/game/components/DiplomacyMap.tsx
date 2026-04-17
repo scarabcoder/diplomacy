@@ -217,6 +217,8 @@ function renderAnnotation(
   }
 
   const color = getAnnotationColor(annotation);
+  const tone = 'tone' in annotation ? annotation.tone : undefined;
+  const isFailure = tone === 'failure';
   const dashArray =
     annotation.kind === 'support'
       ? '5 4'
@@ -229,7 +231,10 @@ function renderAnnotation(
       : 'url(#order-arrow)';
 
   return (
-    <g key={annotation.id}>
+    <g
+      key={annotation.id}
+      className={isFailure ? 'annotation-flash' : undefined}
+    >
       <path
         d={drawArrowPath(from, to)}
         fill="none"
@@ -318,291 +323,293 @@ export function DiplomacyMap({
         doubleClick={{ disabled: true }}
       >
         {() => (
-            <TransformComponent
-              wrapperStyle={{ width: '100%', height: '100%' }}
-              contentStyle={{ width: '100%', height: '100%' }}
+          <TransformComponent
+            wrapperStyle={{ width: '100%', height: '100%' }}
+            contentStyle={{ width: '100%', height: '100%' }}
+          >
+            <svg
+              viewBox={`0 0 ${mapData.width} ${mapData.height}`}
+              className="h-full w-full"
+              preserveAspectRatio="xMidYMid meet"
             >
-              <svg
-                viewBox={`0 0 ${mapData.width} ${mapData.height}`}
-                className="h-full w-full"
-                preserveAspectRatio="xMidYMid meet"
-              >
-                <defs>
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="2.5" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                  <marker
-                    id="order-arrow"
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="5"
-                    refY="4"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
-                  </marker>
-                  <marker
-                    id="order-dot"
-                    markerWidth="6"
-                    markerHeight="6"
-                    refX="3"
-                    refY="3"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <circle cx="3" cy="3" r="2.4" fill="currentColor" />
-                  </marker>
-                </defs>
-
-                <image
-                  href={classicMapAssetUrl}
-                  width={mapData.width}
-                  height={mapData.height}
-                  preserveAspectRatio="none"
-                />
-
-                <g className="territories">
-                  {baseProvinceOverlays.map((province) => {
-                    const provinceData = PROVINCES[province.id];
-                    if (!provinceData) return null;
-
-                    const isSelected =
-                      selectedProvince === province.id ||
-                      selectedBaseProvince === province.id ||
-                      selectedUnitProvince === province.id;
-                    const isValidTarget =
-                      validTargetSet.has(province.id) ||
-                      [...validTargetSet].some(
-                        (target) => getBaseProvince(target) === province.id,
-                      );
-
-                    return (
-                      <Territory
-                        key={province.id}
-                        id={province.id}
-                        d={province.d}
-                        fill={getTerritoryFill(province.id, supplyCenters)}
-                        fillOpacity={
-                          provinceData.type === 'water'
-                            ? 0.14
-                            : provinceData.supplyCenter
-                              ? 0.18
-                              : 0.1
-                        }
-                        isSelected={isSelected}
-                        isHovered={hoveredBaseId === province.id}
-                        isValidTarget={isValidTarget}
-                        onClick={() => onProvinceClick?.(province.id)}
-                        onMouseEnter={() => setHoveredId(province.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                      />
-                    );
-                  })}
-                </g>
-
-                <g className="coasts">
-                  {coastOverlays.map((province) => {
-                    const isSelected = selectedProvince === province.id;
-                    const isValidTarget = validTargetSet.has(province.id);
-                    const isHovered = hoveredId === province.id;
-                    // Coast overlays only need to capture clicks when
-                    // they're explicitly valid targets (e.g., fleet moves
-                    // to a specific coast). Otherwise, let clicks pass
-                    // through to the base territory underneath.
-                    const needsInteraction =
-                      isSelected || isValidTarget;
-
-                    return (
-                      <path
-                        key={province.id}
-                        data-territory-id={province.id}
-                        d={province.d}
-                        fill="transparent"
-                        stroke={
-                          isSelected || isValidTarget || isHovered
-                            ? '#fbbf24'
-                            : 'transparent'
-                        }
-                        strokeWidth={
-                          isSelected || isValidTarget || isHovered ? 3 : 0
-                        }
-                        filter={isSelected ? 'url(#glow)' : undefined}
-                        cursor={needsInteraction ? 'pointer' : undefined}
-                        pointerEvents={needsInteraction ? 'all' : 'none'}
-                        onClick={
-                          needsInteraction
-                            ? () => onProvinceClick?.(province.id)
-                            : undefined
-                        }
-                        onMouseEnter={
-                          needsInteraction
-                            ? () => setHoveredId(province.id)
-                            : undefined
-                        }
-                        onMouseLeave={
-                          needsInteraction
-                            ? () => setHoveredId(null)
-                            : undefined
-                        }
-                        style={{
-                          transition: 'stroke-width 150ms ease',
-                        }}
-                      />
-                    );
-                  })}
-                </g>
-
-                <g
-                  className="annotations"
-                  pointerEvents="none"
-                  style={{ color: '#f8fafc' }}
+              <defs>
+                <style>{`
+                    @keyframes flash-red {
+                      0%, 100% { opacity: 1; }
+                      50% { opacity: 0.25; }
+                    }
+                    .annotation-flash { animation: flash-red 1.2s ease-in-out infinite; }
+                  `}</style>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="2.5" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <marker
+                  id="order-arrow"
+                  markerWidth="4"
+                  markerHeight="4"
+                  refX="2.5"
+                  refY="2"
+                  orient="auto"
+                  markerUnits="strokeWidth"
                 >
-                  {annotations.map((annotation) =>
-                    renderAnnotation(annotation, mapData.centers),
-                  )}
-                </g>
+                  <path d="M 0 0 L 4 2 L 0 4 z" fill="currentColor" />
+                </marker>
+                <marker
+                  id="order-dot"
+                  markerWidth="6"
+                  markerHeight="6"
+                  refX="3"
+                  refY="3"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <circle cx="3" cy="3" r="2.4" fill="currentColor" />
+                </marker>
+              </defs>
 
-                <g className="supply-centers" pointerEvents="none">
-                  {Object.entries(supplyCenters).map(([provinceId, owner]) => {
-                    const center = mapData.centers[provinceId];
-                    if (!center) return null;
+              <image
+                href={classicMapAssetUrl}
+                width={mapData.width}
+                height={mapData.height}
+                preserveAspectRatio="none"
+              />
 
-                    return (
-                      <g
-                        key={`sc-${provinceId}`}
-                        transform={`translate(${center.x}, ${center.y})`}
+              <g className="territories">
+                {baseProvinceOverlays.map((province) => {
+                  const provinceData = PROVINCES[province.id];
+                  if (!provinceData) return null;
+
+                  const isSelected =
+                    selectedProvince === province.id ||
+                    selectedBaseProvince === province.id ||
+                    selectedUnitProvince === province.id;
+                  const isValidTarget =
+                    validTargetSet.has(province.id) ||
+                    [...validTargetSet].some(
+                      (target) => getBaseProvince(target) === province.id,
+                    );
+
+                  return (
+                    <Territory
+                      key={province.id}
+                      id={province.id}
+                      d={province.d}
+                      fill={getTerritoryFill(province.id, supplyCenters)}
+                      fillOpacity={
+                        provinceData.type === 'water'
+                          ? 0.14
+                          : provinceData.supplyCenter
+                            ? 0.18
+                            : 0.1
+                      }
+                      isSelected={isSelected}
+                      isHovered={hoveredBaseId === province.id}
+                      isValidTarget={isValidTarget}
+                      onClick={() => onProvinceClick?.(province.id)}
+                      onMouseEnter={() => setHoveredId(province.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                    />
+                  );
+                })}
+              </g>
+
+              <g className="coasts">
+                {coastOverlays.map((province) => {
+                  const isSelected = selectedProvince === province.id;
+                  const isValidTarget = validTargetSet.has(province.id);
+                  const isHovered = hoveredId === province.id;
+                  // Coast overlays only need to capture clicks when
+                  // they're explicitly valid targets (e.g., fleet moves
+                  // to a specific coast). Otherwise, let clicks pass
+                  // through to the base territory underneath.
+                  const needsInteraction = isSelected || isValidTarget;
+
+                  return (
+                    <path
+                      key={province.id}
+                      data-territory-id={province.id}
+                      d={province.d}
+                      fill="transparent"
+                      stroke={
+                        isSelected || isValidTarget || isHovered
+                          ? '#fbbf24'
+                          : 'transparent'
+                      }
+                      strokeWidth={
+                        isSelected || isValidTarget || isHovered ? 3 : 0
+                      }
+                      filter={isSelected ? 'url(#glow)' : undefined}
+                      cursor={needsInteraction ? 'pointer' : undefined}
+                      pointerEvents={needsInteraction ? 'all' : 'none'}
+                      onClick={
+                        needsInteraction
+                          ? () => onProvinceClick?.(province.id)
+                          : undefined
+                      }
+                      onMouseEnter={
+                        needsInteraction
+                          ? () => setHoveredId(province.id)
+                          : undefined
+                      }
+                      onMouseLeave={
+                        needsInteraction ? () => setHoveredId(null) : undefined
+                      }
+                      style={{
+                        transition: 'stroke-width 150ms ease',
+                      }}
+                    />
+                  );
+                })}
+              </g>
+
+              <g
+                className="annotations"
+                pointerEvents="none"
+                style={{ color: '#f8fafc' }}
+              >
+                {annotations.map((annotation) =>
+                  renderAnnotation(annotation, mapData.centers),
+                )}
+              </g>
+
+              <g className="supply-centers" pointerEvents="none">
+                {Object.entries(supplyCenters).map(([provinceId, owner]) => {
+                  const center = mapData.centers[provinceId];
+                  if (!center) return null;
+
+                  return (
+                    <g
+                      key={`sc-${provinceId}`}
+                      transform={`translate(${center.x}, ${center.y})`}
+                    >
+                      <circle
+                        r={5}
+                        fill={owner ? POWER_COLORS[owner as Power] : '#6b7280'}
+                        stroke="#2f2417"
+                        strokeWidth={1.5}
+                      />
+                      <circle r={2.2} fill="#fff" fillOpacity={0.85} />
+                    </g>
+                  );
+                })}
+              </g>
+
+              <g className="units">
+                {Object.entries(positions).map(([province, unit]) => {
+                  if (hiddenUnitSet.has(getBaseProvince(province))) {
+                    return null;
+                  }
+
+                  const provinceRef = unit.coast
+                    ? `${province}/${unit.coast}`
+                    : province;
+                  const center =
+                    mapData.centers[provinceRef] ??
+                    mapData.centers[province] ??
+                    mapData.centers[getBaseProvince(province)];
+                  if (!center) return null;
+
+                  return (
+                    <UnitMarker
+                      key={`unit-${provinceRef}`}
+                      cx={center.x}
+                      cy={center.y}
+                      power={unit.power}
+                      unitType={unit.unitType}
+                      isSelected={selectedUnitProvince === province}
+                      isEmphasized={highlightedUnitSet.has(province)}
+                      onClick={() => onUnitClick?.(province)}
+                    />
+                  );
+                })}
+              </g>
+
+              <g className="overlay-units" pointerEvents="none">
+                {overlayUnits.map((unit) => {
+                  const provinceRef = unit.coast
+                    ? `${unit.province}/${unit.coast}`
+                    : unit.province;
+                  const center =
+                    mapData.centers[provinceRef] ??
+                    mapData.centers[unit.province] ??
+                    mapData.centers[getBaseProvince(unit.province)];
+                  if (!center) {
+                    return null;
+                  }
+
+                  return (
+                    <UnitMarker
+                      key={unit.id}
+                      cx={center.x}
+                      cy={center.y}
+                      power={unit.power}
+                      unitType={unit.unitType}
+                      isEmphasized={unit.isEmphasized}
+                      isGhost={unit.isGhost}
+                    />
+                  );
+                })}
+              </g>
+
+              {renderOverlay?.(mapData)}
+
+              {hoveredId &&
+                (() => {
+                  const provinceId = getBaseProvince(hoveredId);
+                  const province = PROVINCES[provinceId];
+                  const center =
+                    mapData.centers[hoveredId] ?? mapData.centers[provinceId];
+                  if (!province || !center) return null;
+
+                  const unit = positions[provinceId];
+                  const owner = supplyCenters[provinceId];
+                  const coast = getCoast(hoveredId);
+
+                  let tooltipText = province.name;
+                  if (coast) {
+                    tooltipText += ` (${coast.toUpperCase()})`;
+                  }
+                  if (unit) {
+                    tooltipText += ` — ${unit.unitType === 'army' ? 'Army' : 'Fleet'} (${unit.power})`;
+                  }
+                  if (owner) {
+                    tooltipText += province.supplyCenter
+                      ? ` [SC: ${owner}]`
+                      : ` [Owned by ${owner}]`;
+                  } else if (province.supplyCenter) {
+                    tooltipText += ' [SC: neutral]';
+                  }
+
+                  return (
+                    <g pointerEvents="none">
+                      <rect
+                        x={center.x - 86}
+                        y={center.y - 32}
+                        width={172}
+                        height={24}
+                        rx={4}
+                        fill="#111827"
+                        fillOpacity={0.92}
+                      />
+                      <text
+                        x={center.x}
+                        y={center.y - 17}
+                        textAnchor="middle"
+                        fill="#fff"
+                        fontSize={10}
+                        fontFamily="system-ui, sans-serif"
                       >
-                        <circle
-                          r={5}
-                          fill={
-                            owner ? POWER_COLORS[owner as Power] : '#6b7280'
-                          }
-                          stroke="#2f2417"
-                          strokeWidth={1.5}
-                        />
-                        <circle r={2.2} fill="#fff" fillOpacity={0.85} />
-                      </g>
-                    );
-                  })}
-                </g>
-
-                <g className="units">
-                  {Object.entries(positions).map(([province, unit]) => {
-                    if (hiddenUnitSet.has(getBaseProvince(province))) {
-                      return null;
-                    }
-
-                    const provinceRef = unit.coast
-                      ? `${province}/${unit.coast}`
-                      : province;
-                    const center =
-                      mapData.centers[provinceRef] ??
-                      mapData.centers[province] ??
-                      mapData.centers[getBaseProvince(province)];
-                    if (!center) return null;
-
-                    return (
-                      <UnitMarker
-                        key={`unit-${provinceRef}`}
-                        cx={center.x}
-                        cy={center.y}
-                        power={unit.power}
-                        unitType={unit.unitType}
-                        isSelected={selectedUnitProvince === province}
-                        isEmphasized={highlightedUnitSet.has(province)}
-                        onClick={() => onUnitClick?.(province)}
-                      />
-                    );
-                  })}
-                </g>
-
-                <g className="overlay-units" pointerEvents="none">
-                  {overlayUnits.map((unit) => {
-                    const provinceRef = unit.coast
-                      ? `${unit.province}/${unit.coast}`
-                      : unit.province;
-                    const center =
-                      mapData.centers[provinceRef] ??
-                      mapData.centers[unit.province] ??
-                      mapData.centers[getBaseProvince(unit.province)];
-                    if (!center) {
-                      return null;
-                    }
-
-                    return (
-                      <UnitMarker
-                        key={unit.id}
-                        cx={center.x}
-                        cy={center.y}
-                        power={unit.power}
-                        unitType={unit.unitType}
-                        isEmphasized={unit.isEmphasized}
-                        isGhost={unit.isGhost}
-                      />
-                    );
-                  })}
-                </g>
-
-                {renderOverlay?.(mapData)}
-
-                {hoveredId &&
-                  (() => {
-                    const provinceId = getBaseProvince(hoveredId);
-                    const province = PROVINCES[provinceId];
-                    const center =
-                      mapData.centers[hoveredId] ?? mapData.centers[provinceId];
-                    if (!province || !center) return null;
-
-                    const unit = positions[provinceId];
-                    const owner = supplyCenters[provinceId];
-                    const coast = getCoast(hoveredId);
-
-                    let tooltipText = province.name;
-                    if (coast) {
-                      tooltipText += ` (${coast.toUpperCase()})`;
-                    }
-                    if (unit) {
-                      tooltipText += ` — ${unit.unitType === 'army' ? 'Army' : 'Fleet'} (${unit.power})`;
-                    }
-                    if (owner) {
-                      tooltipText += province.supplyCenter
-                        ? ` [SC: ${owner}]`
-                        : ` [Owned by ${owner}]`;
-                    } else if (province.supplyCenter) {
-                      tooltipText += ' [SC: neutral]';
-                    }
-
-                    return (
-                      <g pointerEvents="none">
-                        <rect
-                          x={center.x - 86}
-                          y={center.y - 32}
-                          width={172}
-                          height={24}
-                          rx={4}
-                          fill="#111827"
-                          fillOpacity={0.92}
-                        />
-                        <text
-                          x={center.x}
-                          y={center.y - 17}
-                          textAnchor="middle"
-                          fill="#fff"
-                          fontSize={10}
-                          fontFamily="system-ui, sans-serif"
-                        >
-                          {tooltipText}
-                        </text>
-                      </g>
-                    );
-                  })()}
-              </svg>
-            </TransformComponent>
+                        {tooltipText}
+                      </text>
+                    </g>
+                  );
+                })()}
+            </svg>
+          </TransformComponent>
         )}
       </TransformWrapper>
     </div>

@@ -5,13 +5,26 @@ import {
   buildActionSchema,
 } from '@/database/schema/game-schema.ts';
 
+function optionalCoastSchema(description: string) {
+  return z.preprocess((value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized.length > 0 ? normalized : undefined;
+  }, z.string().max(2).optional().describe(description));
+}
+
 const orderInputSchema = z.object({
   unitProvince: z
     .string()
     .min(2)
     .max(4)
     .describe('Province of the unit issuing the order.'),
-  orderType: orderTypeSchema.describe('Order type: hold, move, support, or convoy.'),
+  orderType: orderTypeSchema.describe(
+    'Order type: hold, move, support, or convoy.',
+  ),
   targetProvince: z
     .string()
     .min(2)
@@ -28,11 +41,9 @@ const orderInputSchema = z.object({
     .boolean()
     .optional()
     .describe('Whether a move order should travel by convoy.'),
-  coast: z
-    .string()
-    .max(2)
-    .optional()
-    .describe('Optional coast suffix when a coastal destination requires it.'),
+  coast: optionalCoastSchema(
+    'Optional coast suffix when a coastal destination requires it.',
+  ),
 });
 
 export const submitOrdersSchema = z.object({
@@ -77,11 +88,7 @@ const buildInputSchema = z.object({
     .min(2)
     .max(4)
     .describe('Province where the build or disband happens.'),
-  coast: z
-    .string()
-    .max(2)
-    .optional()
-    .describe('Optional coast suffix for coastal builds.'),
+  coast: optionalCoastSchema('Optional coast suffix for coastal builds.'),
 });
 
 export const submitBuildsSchema = z.object({

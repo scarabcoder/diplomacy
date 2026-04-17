@@ -1,4 +1,10 @@
-import { type CSSProperties, type Dispatch, type SetStateAction, useState } from 'react';
+import {
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useState,
+} from 'react';
 import {
   useMutation,
   useQuery,
@@ -12,6 +18,7 @@ import {
   Copy,
   Crown,
   Gavel,
+  History,
   Loader2,
   MessageSquare,
   Play,
@@ -186,7 +193,10 @@ function RoomPage() {
     <>
       <WarRoomStage>
         <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
-          <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 0 } as CSSProperties}>
+          <ParchmentPanel
+            className="stagger-panel px-5 py-5 sm:px-6"
+            style={{ '--stagger-index': 0 } as CSSProperties}
+          >
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-3">
                 <Link
@@ -360,7 +370,10 @@ function LobbyView({
           />
         </div>
 
-        <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 1 } as CSSProperties}>
+        <ParchmentPanel
+          className="stagger-panel px-5 py-5 sm:px-6"
+          style={{ '--stagger-index': 1 } as CSSProperties}
+        >
           <div className="space-y-5">
             <div className="space-y-2">
               <SectionKicker>Power Assignment</SectionKicker>
@@ -525,7 +538,9 @@ function LobbyView({
                       </div>
                       <Button
                         className="h-10 rounded-full px-4 text-xs font-bold uppercase tracking-[0.14em]"
-                        onClick={() => void handleCopyBotToken(bot.botId, bot.token)}
+                        onClick={() =>
+                          void handleCopyBotToken(bot.botId, bot.token)
+                        }
                         type="button"
                         variant="outline"
                       >
@@ -549,7 +564,10 @@ function LobbyView({
       </div>
 
       <div className="space-y-6">
-        <ParchmentPanel className="stagger-panel sticky top-5 px-5 py-5 sm:px-6" style={{ '--stagger-index': 2 } as CSSProperties}>
+        <ParchmentPanel
+          className="stagger-panel sticky top-5 px-5 py-5 sm:px-6"
+          style={{ '--stagger-index': 2 } as CSSProperties}
+        >
           <div className="space-y-5">
             <div className="space-y-2">
               <SectionKicker>Room Status</SectionKicker>
@@ -783,16 +801,71 @@ function ActiveRoomView({
   const { data: gameState } = useSuspenseQuery(
     orpcUtils.game.getGameState.queryOptions({ input: { roomId } }),
   );
+  const { data: phaseResultHistory } = useQuery(
+    orpcUtils.game.getPhaseResultHistory.queryOptions({
+      input: { roomId },
+    }),
+  );
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const navigate = useNavigate();
+
+  const hasHistory = (phaseResultHistory?.length ?? 0) > 0;
+  const handleOpenHistory = hasHistory
+    ? () => setHistoryIndex((phaseResultHistory?.length ?? 1) - 1)
+    : undefined;
+
+  const pendingPhaseResultId = gameState?.pendingPhaseResult?.id ?? null;
+  useEffect(() => {
+    if (pendingPhaseResultId && historyIndex !== null) {
+      setHistoryIndex(null);
+    }
+  }, [pendingPhaseResultId, historyIndex]);
 
   if (gameState?.pendingPhaseResult) {
     return (
       <GamePhaseResultsScreen
+        mode="live"
         roomName={room.name}
         roomCode={room.code}
         phaseResultId={gameState.pendingPhaseResult.id}
         payload={gameState.pendingPhaseResult.payload}
         onAcknowledged={onUpdate}
+      />
+    );
+  }
+
+  if (
+    historyIndex !== null &&
+    phaseResultHistory &&
+    phaseResultHistory.length > 0
+  ) {
+    const clampedIndex = Math.min(
+      Math.max(historyIndex, 0),
+      phaseResultHistory.length - 1,
+    );
+    const entry = phaseResultHistory[clampedIndex]!;
+    return (
+      <GamePhaseResultsScreen
+        mode="history"
+        roomName={room.name}
+        roomCode={room.code}
+        phaseResultId={entry.id}
+        payload={entry.payload}
+        currentIndex={clampedIndex}
+        totalCount={phaseResultHistory.length}
+        onPrev={() =>
+          setHistoryIndex((current) =>
+            current === null ? null : Math.max(0, current - 1),
+          )
+        }
+        onNext={() =>
+          setHistoryIndex((current) =>
+            current === null
+              ? null
+              : Math.min(phaseResultHistory.length - 1, current + 1),
+          )
+        }
+        onClose={() => setHistoryIndex(null)}
       />
     );
   }
@@ -805,10 +878,9 @@ function ActiveRoomView({
             room={room}
             players={players}
             unreadThreadCount={unreadThreadCount}
-            canAccessMessages={
-              !!myPlayer && !myPlayer.isSpectator
-            }
+            canAccessMessages={!!myPlayer && !myPlayer.isSpectator}
             onOpenMessages={onToggleMessages}
+            onOpenHistory={handleOpenHistory}
           />
         </div>
       </div>
@@ -864,6 +936,7 @@ function ActiveRoomView({
         onToggleMessages={onToggleMessages}
         onMessagePlayer={onMessagePlayer}
         onInspectBot={handleInspectBot}
+        onOpenHistory={handleOpenHistory}
       />
       {showFinalizeButton && (
         <FinalizePhaseButton roomId={roomId} onFinalized={onUpdate} />
@@ -915,16 +988,16 @@ function CompletedView({
   unreadThreadCount,
   canAccessMessages,
   onOpenMessages,
+  onOpenHistory,
 }: {
   room: any;
   players: any[];
   unreadThreadCount: number;
   canAccessMessages: boolean;
   onOpenMessages: () => void;
+  onOpenHistory?: () => void;
 }) {
-  const winner = players.find(
-    (player) => player.id === room.winnerPlayerId,
-  );
+  const winner = players.find((player) => player.id === room.winnerPlayerId);
 
   return (
     <ParchmentPanel className="px-6 py-6">
@@ -951,19 +1024,32 @@ function CompletedView({
             Final result
           </StatusSeal>
         </div>
-        {canAccessMessages ? (
-          <div className="pt-3">
-            <Button
-              className="h-11 rounded-full border border-black/10 bg-white/72 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
-              onClick={onOpenMessages}
-              type="button"
-              variant="outline"
-            >
-              <MessageSquare className="size-4" />
-              {unreadThreadCount > 0
-                ? `${unreadThreadCount} unread`
-                : 'Archived messages'}
-            </Button>
+        {canAccessMessages || onOpenHistory ? (
+          <div className="flex flex-wrap gap-3 pt-3">
+            {canAccessMessages ? (
+              <Button
+                className="h-11 rounded-full border border-black/10 bg-white/72 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
+                onClick={onOpenMessages}
+                type="button"
+                variant="outline"
+              >
+                <MessageSquare className="size-4" />
+                {unreadThreadCount > 0
+                  ? `${unreadThreadCount} unread`
+                  : 'Archived messages'}
+              </Button>
+            ) : null}
+            {onOpenHistory ? (
+              <Button
+                className="h-11 rounded-full border border-black/10 bg-white/72 px-5 text-sm font-bold uppercase tracking-[0.14em] text-foreground hover:bg-white"
+                onClick={onOpenHistory}
+                type="button"
+                variant="outline"
+              >
+                <History className="size-4" />
+                View history
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>

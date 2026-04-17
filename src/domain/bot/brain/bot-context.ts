@@ -18,7 +18,12 @@ const logger = createLogger('bot-context');
  */
 export function createBotOrpcContext(botSession: BotSeatSession): ORPCContext {
   logger.debug(
-    { botId: botSession.botId, botName: botSession.botName, playerId: botSession.playerId, roomId: botSession.roomId },
+    {
+      botId: botSession.botId,
+      botName: botSession.botName,
+      playerId: botSession.playerId,
+      roomId: botSession.roomId,
+    },
     'Creating oRPC context for bot',
   );
   return {
@@ -60,12 +65,21 @@ export async function loadBotSession(
   );
 
   if (!row) {
-    logger.warn({ playerId }, 'No bot session found for player — credential may be missing or revoked');
+    logger.warn(
+      { playerId },
+      'No bot session found for player — credential may be missing or revoked',
+    );
     return null;
   }
 
   logger.debug(
-    { playerId, botId: row.botId, botName: row.botName, credentialId: row.credentialId, roomId: row.roomId },
+    {
+      playerId,
+      botId: row.botId,
+      botName: row.botName,
+      credentialId: row.credentialId,
+      roomId: row.roomId,
+    },
     'Bot session loaded successfully',
   );
 

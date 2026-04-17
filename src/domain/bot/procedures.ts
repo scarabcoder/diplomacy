@@ -1,5 +1,5 @@
 import { ORPCError } from '@orpc/client';
-import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
   requireRoomMembershipForActor,
   requireRpcActor,
@@ -100,9 +100,7 @@ export const getBotMessages = authed
     }
 
     // Batch-load conversation participants
-    const conversationIds = [
-      ...new Set(messages.map((m) => m.conversationId)),
-    ];
+    const conversationIds = [...new Set(messages.map((m) => m.conversationId))];
 
     const participantRows = await database
       .select({

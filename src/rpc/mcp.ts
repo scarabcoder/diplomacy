@@ -158,7 +158,9 @@ function buildToolName(path: readonly string[], meta: McpToolMeta): string {
   return formatMcpToolName(meta.name ?? path.join('.'));
 }
 
-function requestFromRequestInfo(requestInfo?: RequestInfo): Request | undefined {
+function requestFromRequestInfo(
+  requestInfo?: RequestInfo,
+): Request | undefined {
   if (!requestInfo?.url) {
     return undefined;
   }
@@ -191,9 +193,7 @@ function serializeToolValue(value: unknown): string {
   return String(value);
 }
 
-function isStructuredContent(
-  value: unknown,
-): value is Record<string, unknown> {
+function isStructuredContent(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -323,7 +323,8 @@ export function createMcpRouter<TRouter extends AnyRouter>(
           path: tool.path,
           arguments: args,
           request:
-            callOptions.request ?? requestFromRequestInfo(callOptions.requestInfo),
+            callOptions.request ??
+            requestFromRequestInfo(callOptions.requestInfo),
           requestInfo: callOptions.requestInfo,
           authInfo: callOptions.authInfo,
           context: callOptions.context,

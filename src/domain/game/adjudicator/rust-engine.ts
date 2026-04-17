@@ -10,6 +10,10 @@ import type {
   SupplyCenterOwnership,
   UnitPositions,
 } from '@/domain/game/engine/types.ts';
+import { PROVINCES } from '@/domain/game/engine/map-data.ts';
+import { resolveBuilds } from '@/domain/game/engine/resolve-builds.ts';
+import { resolveOrders } from '@/domain/game/engine/resolve-orders.ts';
+import { validateOrder } from '@/domain/game/engine/validate-order.ts';
 import { getBaseProvince } from '@/domain/game/lib/province-refs.ts';
 
 type WasmModule = {
@@ -41,28 +45,86 @@ type BuildResolution = BuildResult & {
   failed: Array<{ order: BuildOrder; reason: string }>;
 };
 
+type ModuleLoader = () => Promise<WasmModule>;
+
 let modulePromise: Promise<WasmModule> | null = null;
+const defaultModuleLoader: ModuleLoader = async () => {
+  const glueModule =
+    // Vite SSR cannot resolve a fully variable dynamic import here.
+    (await import(
+      '../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.js'
+    )) as WasmGlueModule;
+  const wasmPath = `${process.cwd()}/rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.wasm`;
+  const wasmBytes = await Bun.file(wasmPath).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(wasmBytes, {
+    './diplomacy_wasm_bg.js': glueModule,
+  });
+  const exports = instance.exports as WasmInstanceExports;
+
+  glueModule.__wbg_set_wasm(exports);
+  exports.__wbindgen_start();
+
+  return glueModule;
+};
+let moduleLoader: ModuleLoader = defaultModuleLoader;
+
+function normalizeOptionalCoast(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') {
+    return value ?? null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeCoastForUnit(
+  province: string,
+  unitType: 'army' | 'fleet',
+  coast: string | null | undefined,
+): string | null {
+  const normalized = normalizeOptionalCoast(coast);
+  if (!normalized || unitType !== 'fleet') {
+    return null;
+  }
+
+  const provinceData = PROVINCES[province];
+  const validCoasts = provinceData?.coasts ?? [];
+  if (validCoasts.length === 0) {
+    return null;
+  }
+
+  return validCoasts.includes(normalized) ? normalized : null;
+}
 
 async function loadModule(): Promise<WasmModule> {
   if (!modulePromise) {
-    modulePromise = (async () => {
-      const glueModule =
-        (await import('../../../../rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.js')) as WasmGlueModule;
-      const wasmPath = `${process.cwd()}/rust/diplomacy-wasm/pkg/diplomacy_wasm_bg.wasm`;
-      const wasmBytes = await Bun.file(wasmPath).arrayBuffer();
-      const { instance } = await WebAssembly.instantiate(wasmBytes, {
-        './diplomacy_wasm_bg.js': glueModule,
-      });
-      const exports = instance.exports as WasmInstanceExports;
-
-      glueModule.__wbg_set_wasm(exports);
-      exports.__wbindgen_start();
-
-      return glueModule;
-    })();
+    modulePromise = moduleLoader().catch((error) => {
+      modulePromise = null;
+      throw error;
+    });
   }
 
   return modulePromise;
+}
+
+function shouldLogFallbackWarning(): boolean {
+  return process.env.NODE_ENV !== 'test';
+}
+
+function logMainPhaseFallback(
+  operation: 'validateMainOrders' | 'adjudicateMainPhase',
+  error: unknown,
+) {
+  if (!shouldLogFallbackWarning()) {
+    return;
+  }
+
+  console.warn(
+    `[rust-engine] ${operation} failed in WASM; falling back to TypeScript adjudicator`,
+    error,
+  );
 }
 
 function normalizePositions(positions: UnitPositions): UnitPositions {
@@ -72,7 +134,7 @@ function normalizePositions(positions: UnitPositions): UnitPositions {
       {
         power: unit.power,
         unitType: unit.unitType,
-        coast: unit.coast ?? null,
+        coast: normalizeCoastForUnit(province, unit.unitType, unit.coast),
       },
     ]),
   );
@@ -84,7 +146,7 @@ function normalizeOrders(orders: Order[]): Order[] {
     targetProvince: order.targetProvince ?? null,
     supportedUnitProvince: order.supportedUnitProvince ?? null,
     viaConvoy: order.viaConvoy ?? false,
-    coast: order.coast ?? null,
+    coast: normalizeOptionalCoast(order.coast),
   }));
 }
 
@@ -93,7 +155,7 @@ function normalizeDislodgedUnits(
 ): DislodgedUnit[] {
   return dislodgedUnits.map((unit) => ({
     ...unit,
-    coast: unit.coast ?? null,
+    coast: normalizeOptionalCoast(unit.coast),
   }));
 }
 
@@ -108,8 +170,32 @@ function normalizeBuilds(builds: BuildOrder[]): BuildOrder[] {
   return builds.map((build) => ({
     ...build,
     unitType: build.unitType ?? null,
-    coast: build.coast ?? null,
+    coast:
+      build.action === 'build' && build.unitType
+        ? normalizeCoastForUnit(build.province, build.unitType, build.coast)
+        : normalizeOptionalCoast(build.coast),
   }));
+}
+
+function logBuildPhaseFallback(error: unknown) {
+  if (!shouldLogFallbackWarning()) {
+    return;
+  }
+
+  console.warn(
+    '[rust-engine] adjudicateBuildPhase failed in WASM; falling back to TypeScript adjudicator',
+    error,
+  );
+}
+
+function fallbackAdjudicateBuildPhase(
+  positions: UnitPositions,
+  supplyCenters: SupplyCenterOwnership,
+  builds: BuildOrder[],
+  error: unknown,
+): BuildResolution {
+  logBuildPhaseFallback(error);
+  return resolveBuilds(positions, supplyCenters, builds);
 }
 
 function deriveRetreatOrderResults(
@@ -199,26 +285,89 @@ function deriveRetreatOrderResults(
   });
 }
 
+function fallbackValidateMainOrders(
+  positions: UnitPositions,
+  orders: Order[],
+  error: unknown,
+): ValidationResult {
+  logMainPhaseFallback('validateMainOrders', error);
+
+  const errors = orders.flatMap((order) => {
+    const validation = validateOrder(positions, order);
+    if (validation.valid) {
+      return [];
+    }
+
+    return [
+      {
+        unitProvince: order.unitProvince,
+        message: validation.reason ?? 'Invalid order submission',
+      },
+    ];
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+function fallbackAdjudicateMainPhase(
+  positions: UnitPositions,
+  orders: Order[],
+  error: unknown,
+): ResolutionResult {
+  logMainPhaseFallback('adjudicateMainPhase', error);
+  return resolveOrders(positions, orders);
+}
+
+export function __setModuleLoaderForTests(loader: ModuleLoader | null) {
+  moduleLoader = loader ?? defaultModuleLoader;
+  modulePromise = null;
+}
+
 export async function validateMainOrders(
   positions: UnitPositions,
   orders: Order[],
 ): Promise<ValidationResult> {
-  const wasm = await loadModule();
-  return wasm.validateMainOrders({
-    positions: normalizePositions(positions),
-    orders: normalizeOrders(orders),
-  }) as ValidationResult;
+  const normalizedPositions = normalizePositions(positions);
+  const normalizedOrders = normalizeOrders(orders);
+
+  try {
+    const wasm = await loadModule();
+    return wasm.validateMainOrders({
+      positions: normalizedPositions,
+      orders: normalizedOrders,
+    }) as ValidationResult;
+  } catch (error) {
+    return fallbackValidateMainOrders(
+      normalizedPositions,
+      normalizedOrders,
+      error,
+    );
+  }
 }
 
 export async function adjudicateMainPhase(
   positions: UnitPositions,
   orders: Order[],
 ): Promise<ResolutionResult> {
-  const wasm = await loadModule();
-  return wasm.adjudicateMainPhase({
-    positions: normalizePositions(positions),
-    orders: normalizeOrders(orders),
-  }) as ResolutionResult;
+  const normalizedPositions = normalizePositions(positions);
+  const normalizedOrders = normalizeOrders(orders);
+
+  try {
+    const wasm = await loadModule();
+    return wasm.adjudicateMainPhase({
+      positions: normalizedPositions,
+      orders: normalizedOrders,
+    }) as ResolutionResult;
+  } catch (error) {
+    return fallbackAdjudicateMainPhase(
+      normalizedPositions,
+      normalizedOrders,
+      error,
+    );
+  }
 }
 
 export async function adjudicateRetreatPhase(
@@ -250,9 +399,21 @@ export async function adjudicateBuildPhase(
   builds: BuildOrder[],
 ): Promise<BuildResolution> {
   const wasm = await loadModule();
-  return wasm.adjudicateBuildPhase({
-    positions: normalizePositions(positions),
-    supplyCenters,
-    builds: normalizeBuilds(builds),
-  }) as BuildResolution;
+  const normalizedPositions = normalizePositions(positions);
+  const normalizedBuilds = normalizeBuilds(builds);
+
+  try {
+    return wasm.adjudicateBuildPhase({
+      positions: normalizedPositions,
+      supplyCenters,
+      builds: normalizedBuilds,
+    }) as BuildResolution;
+  } catch (error) {
+    return fallbackAdjudicateBuildPhase(
+      normalizedPositions,
+      supplyCenters,
+      normalizedBuilds,
+      error,
+    );
+  }
 }

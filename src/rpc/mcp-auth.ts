@@ -1,5 +1,8 @@
 import type { RequestInfo } from '@modelcontextprotocol/sdk/types.js';
-import { authenticateBotCredentialToken, touchBotCredential } from '@/domain/bot/auth.ts';
+import {
+  authenticateBotCredentialToken,
+  touchBotCredential,
+} from '@/domain/bot/auth.ts';
 import type { ORPCContext } from '@/rpc/base.ts';
 
 export type ResolveMcpOrpcContextOptions = {

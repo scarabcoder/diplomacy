@@ -12,9 +12,7 @@ describe('message utils', () => {
   });
 
   it('allows any non-spectator player to access messages', () => {
-    expect(
-      canAccessMessages({ isSpectator: false, isBot: false }),
-    ).toBeTrue();
+    expect(canAccessMessages({ isSpectator: false, isBot: false })).toBeTrue();
     expect(canAccessMessages({ isSpectator: false, isBot: true })).toBeTrue();
     expect(canAccessMessages({ isSpectator: true, isBot: false })).toBeFalse();
   });

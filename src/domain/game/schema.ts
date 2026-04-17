@@ -18,6 +18,13 @@ export const getSubmissionStatusSchema = z.object({
   roomId: z.string().uuid().describe('The room ID.'),
 });
 
+export const getPhaseResultHistorySchema = z.object({
+  roomId: z.string().uuid().describe('The room ID.'),
+});
+
 export const acknowledgePhaseResultSchema = z.object({
-  phaseResultId: z.string().uuid().describe('The phase result ID to acknowledge.'),
+  phaseResultId: z
+    .string()
+    .uuid()
+    .describe('The phase result ID to acknowledge.'),
 });

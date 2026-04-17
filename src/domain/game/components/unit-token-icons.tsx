@@ -4,9 +4,33 @@ import { cn } from '@/lib/utils.ts';
 export function TankTokenGlyph() {
   return (
     <>
-      <rect x="3" y="13" width="14" height="4.5" rx="1.2" fill="currentColor" stroke="none" />
-      <rect x="7" y="9.2" width="6.5" height="3.8" rx="1" fill="currentColor" stroke="none" />
-      <rect x="13" y="10.4" width="7" height="1.4" rx="0.7" fill="currentColor" stroke="none" />
+      <rect
+        x="3"
+        y="13"
+        width="14"
+        height="4.5"
+        rx="1.2"
+        fill="currentColor"
+        stroke="none"
+      />
+      <rect
+        x="7"
+        y="9.2"
+        width="6.5"
+        height="3.8"
+        rx="1"
+        fill="currentColor"
+        stroke="none"
+      />
+      <rect
+        x="13"
+        y="10.4"
+        width="7"
+        height="1.4"
+        rx="0.7"
+        fill="currentColor"
+        stroke="none"
+      />
       <circle cx="6.5" cy="18.7" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="10" cy="18.7" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="13.5" cy="18.7" r="1.4" fill="currentColor" stroke="none" />

@@ -35,12 +35,14 @@ import {
   validateMainOrders,
 } from '@/domain/game/adjudicator/rust-engine.ts';
 import { advancePhase } from '@/domain/game/game-logic.ts';
+import { attachHistoricalNarration } from '@/domain/game/historical-narrator.ts';
 import {
   buildBuildPhaseResultPayload,
   buildOrderPhaseResultPayload,
   buildRetreatPhaseResultPayload,
   type GamePhaseResultPayload,
 } from '@/domain/game/phase-results.ts';
+import { getPowersRequiringSubmission } from '@/domain/game/submission-requirements.ts';
 import {
   submitOrdersSchema,
   submitRetreatsSchema,
@@ -94,7 +96,6 @@ async function getGameContext(roomId: string, actor: RpcActor) {
 async function checkAllSubmitted(
   roomId: string,
   turnId: string,
-  phase: string,
 ): Promise<boolean> {
   const activePlayers = await database
     .select()
@@ -106,52 +107,129 @@ async function checkAllSubmitted(
       ),
     );
 
-  const activePowers = activePlayers
-    .filter((p) => p.power && p.status === 'active')
-    .map((p) => p.power!);
+  const turn = await selectOne(
+    database.select().from(gameTurnTable).where(eq(gameTurnTable.id, turnId)),
+  );
+  if (!turn) {
+    return false;
+  }
 
-  if (phase === 'order_submission') {
+  const requiredPowers = getPowersRequiringSubmission(turn, activePlayers);
+
+  if (turn.phase === 'order_submission') {
     const orders = await database
       .select({ power: gameOrderTable.power })
       .from(gameOrderTable)
       .where(eq(gameOrderTable.turnId, turnId));
 
     const submittedPowers = new Set(orders.map((o) => o.power));
-    return activePowers.every((p) => submittedPowers.has(p));
+    return requiredPowers.every((p) => submittedPowers.has(p));
   }
 
-  if (phase === 'retreat_submission') {
+  if (turn.phase === 'retreat_submission') {
     const retreats = await database
       .select({ power: gameRetreatTable.power })
       .from(gameRetreatTable)
       .where(eq(gameRetreatTable.turnId, turnId));
 
     const submittedPowers = new Set(retreats.map((r) => r.power));
-    // Only powers with dislodged units need to submit
-    // For now, check if all submitted
-    return submittedPowers.size > 0; // Simplified: at least one retreat submitted
+    return requiredPowers.every((p) => submittedPowers.has(p));
   }
 
-  if (phase === 'build_submission') {
+  if (turn.phase === 'build_submission') {
     const builds = await database
       .select({ power: gameBuildTable.power })
       .from(gameBuildTable)
       .where(eq(gameBuildTable.turnId, turnId));
 
     const submittedPowers = new Set(builds.map((b) => b.power));
-    // Only powers that need to build/disband need to submit
-    const _positions = {} as UnitPositions; // Will be loaded from turn
-    return submittedPowers.size > 0; // Simplified
+    return requiredPowers.every((p) => submittedPowers.has(p));
   }
 
   return false;
+}
+
+async function replaceOrdersForPower(params: {
+  turnId: string;
+  roomId: string;
+  power: Power;
+  records: Array<typeof gameOrderTable.$inferInsert>;
+}) {
+  await database.transaction(async (tx) => {
+    await tx
+      .delete(gameOrderTable)
+      .where(
+        and(
+          eq(gameOrderTable.turnId, params.turnId),
+          eq(gameOrderTable.power, params.power),
+        ),
+      );
+
+    await tx.insert(gameOrderTable).values(params.records);
+  });
+}
+
+async function replaceRetreatsForPower(params: {
+  turnId: string;
+  roomId: string;
+  power: Power;
+  records: Array<typeof gameRetreatTable.$inferInsert>;
+}) {
+  await database.transaction(async (tx) => {
+    await tx
+      .delete(gameRetreatTable)
+      .where(
+        and(
+          eq(gameRetreatTable.turnId, params.turnId),
+          eq(gameRetreatTable.power, params.power),
+        ),
+      );
+
+    await tx.insert(gameRetreatTable).values(params.records);
+  });
+}
+
+async function replaceBuildsForPower(params: {
+  turnId: string;
+  roomId: string;
+  power: Power;
+  records: Array<typeof gameBuildTable.$inferInsert>;
+}) {
+  await database.transaction(async (tx) => {
+    await tx
+      .delete(gameBuildTable)
+      .where(
+        and(
+          eq(gameBuildTable.turnId, params.turnId),
+          eq(gameBuildTable.power, params.power),
+        ),
+      );
+
+    await tx.insert(gameBuildTable).values(params.records);
+  });
 }
 
 async function createPhaseResult(params: {
   roomId: string;
   turn: typeof gameTurnTable.$inferSelect;
   payload: GamePhaseResultPayload;
+  resolvedPositions: UnitPositions;
+  dislodgedUnits: DislodgedUnit[];
 }) {
+  const previousPayloads = await database
+    .select({ payload: gamePhaseResultTable.payload })
+    .from(gamePhaseResultTable)
+    .where(eq(gamePhaseResultTable.turnId, params.turn.id))
+    .orderBy(gamePhaseResultTable.createdAt);
+
+  const payload = await attachHistoricalNarration({
+    existingPayloads: previousPayloads.map(
+      (result) => result.payload as GamePhaseResultPayload,
+    ),
+    payload: params.payload,
+    dislodgedUnits: params.dislodgedUnits,
+  });
+
   await database.insert(gamePhaseResultTable).values({
     roomId: params.roomId,
     turnId: params.turn.id,
@@ -159,7 +237,7 @@ async function createPhaseResult(params: {
     year: params.turn.year,
     season: params.turn.season,
     phase: params.turn.phase,
-    payload: params.payload,
+    payload,
   });
 }
 
@@ -167,6 +245,226 @@ function getTurnDislodgedUnits(
   turn: typeof gameTurnTable.$inferSelect,
 ): DislodgedUnit[] {
   return (turn.dislodgedUnits as DislodgedUnit[] | null) ?? [];
+}
+
+async function resolveOrderSubmissionTurn(
+  room: typeof gameRoomTable.$inferSelect,
+  turn: typeof gameTurnTable.$inferSelect,
+): Promise<void> {
+  const positions = turn.unitPositions as UnitPositions;
+  const allOrders = await database
+    .select()
+    .from(gameOrderTable)
+    .where(eq(gameOrderTable.turnId, turn.id));
+
+  const allEngineOrders: Order[] = allOrders.map((o) => ({
+    power: o.power as Power,
+    unitType: o.unitType as 'army' | 'fleet',
+    unitProvince: o.unitProvince,
+    orderType: o.orderType as 'hold' | 'move' | 'support' | 'convoy',
+    targetProvince: o.targetProvince,
+    supportedUnitProvince: o.supportedUnitProvince,
+    viaConvoy: o.viaConvoy,
+    coast: o.coast,
+  }));
+
+  const result = await adjudicateMainPhase(positions, allEngineOrders);
+
+  for (const orderResult of result.orderResults) {
+    const dbOrder = allOrders.find(
+      (o) =>
+        o.unitProvince === orderResult.order.unitProvince &&
+        o.power === orderResult.order.power,
+    );
+    if (dbOrder) {
+      await database.insert(gameOrderResultTable).values({
+        orderId: dbOrder.id,
+        success: orderResult.success,
+        resultType: orderResult.resultType,
+        dislodgedFrom: orderResult.dislodgedFrom ?? null,
+        retreatOptions: orderResult.retreatOptions ?? null,
+      });
+    }
+  }
+
+  await createPhaseResult({
+    roomId: room.id,
+    turn,
+    payload: buildOrderPhaseResultPayload({
+      turn: {
+        id: turn.id,
+        turnNumber: turn.turnNumber,
+        season: turn.season,
+        year: turn.year,
+        phase: turn.phase,
+        unitPositions: positions,
+        supplyCenters: turn.supplyCenters as SupplyCenterOwnership,
+        dislodgedUnits: getTurnDislodgedUnits(turn),
+      },
+      orders: allEngineOrders,
+      orderResults: result.orderResults,
+      resolvedPositions: result.newPositions,
+      dislodgedUnits: result.dislodgedUnits,
+    }),
+    resolvedPositions: result.newPositions,
+    dislodgedUnits: result.dislodgedUnits,
+  });
+
+  await advancePhase(
+    room.id,
+    turn.id,
+    result.newPositions,
+    result.dislodgedUnits,
+  );
+}
+
+async function resolveRetreatSubmissionTurn(
+  room: typeof gameRoomTable.$inferSelect,
+  turn: typeof gameTurnTable.$inferSelect,
+): Promise<void> {
+  const dislodgedUnits = getTurnDislodgedUnits(turn);
+  const allRetreats = await database
+    .select()
+    .from(gameRetreatTable)
+    .where(eq(gameRetreatTable.turnId, turn.id));
+
+  const retreatOrders: RetreatOrder[] = allRetreats.map((r) => ({
+    power: r.power as Power,
+    unitType: r.unitType as 'army' | 'fleet',
+    unitProvince: r.unitProvince,
+    retreatTo: r.retreatTo,
+  }));
+
+  const positions = turn.unitPositions as UnitPositions;
+  const result = await adjudicateRetreatPhase(
+    positions,
+    dislodgedUnits,
+    retreatOrders,
+  );
+
+  await createPhaseResult({
+    roomId: room.id,
+    turn,
+    payload: buildRetreatPhaseResultPayload({
+      turn: {
+        id: turn.id,
+        turnNumber: turn.turnNumber,
+        season: turn.season,
+        year: turn.year,
+        phase: turn.phase,
+        unitPositions: positions,
+        supplyCenters: turn.supplyCenters as SupplyCenterOwnership,
+        dislodgedUnits,
+      },
+      retreats: retreatOrders,
+      result,
+    }),
+    resolvedPositions: result.newPositions,
+    dislodgedUnits: [],
+  });
+
+  await advancePhase(room.id, turn.id, result.newPositions, []);
+}
+
+async function resolveBuildSubmissionTurn(
+  room: typeof gameRoomTable.$inferSelect,
+  turn: typeof gameTurnTable.$inferSelect,
+): Promise<void> {
+  const positions = turn.unitPositions as UnitPositions;
+  const supplyCenters = turn.supplyCenters as SupplyCenterOwnership;
+  const allBuilds = await database
+    .select()
+    .from(gameBuildTable)
+    .where(eq(gameBuildTable.turnId, turn.id));
+
+  const buildOrders: BuildOrder[] = allBuilds.map((b) => ({
+    power: b.power as Power,
+    action: b.action as 'build' | 'disband' | 'waive',
+    unitType: b.unitType as 'army' | 'fleet' | null,
+    province: b.province,
+    coast: b.coast,
+  }));
+
+  const result = await adjudicateBuildPhase(
+    positions,
+    supplyCenters,
+    buildOrders,
+  );
+
+  await createPhaseResult({
+    roomId: room.id,
+    turn,
+    payload: buildBuildPhaseResultPayload({
+      turn: {
+        id: turn.id,
+        turnNumber: turn.turnNumber,
+        season: turn.season,
+        year: turn.year,
+        phase: turn.phase,
+        unitPositions: positions,
+        supplyCenters,
+        dislodgedUnits: getTurnDislodgedUnits(turn),
+      },
+      builds: buildOrders,
+      result,
+    }),
+    resolvedPositions: result.newPositions,
+    dislodgedUnits: [],
+  });
+
+  await advancePhase(room.id, turn.id, result.newPositions, []);
+}
+
+export async function resolveTurnIfReady(params: {
+  roomId: string;
+  turnId?: string;
+}): Promise<{ resolved: boolean; allSubmitted: boolean }> {
+  const room = await selectOne(
+    database
+      .select()
+      .from(gameRoomTable)
+      .where(eq(gameRoomTable.id, params.roomId)),
+  );
+  if (!room || room.status !== 'playing' || !room.currentTurnId) {
+    return { resolved: false, allSubmitted: false };
+  }
+
+  const turn = await selectOne(
+    database
+      .select()
+      .from(gameTurnTable)
+      .where(eq(gameTurnTable.id, room.currentTurnId)),
+  );
+  if (!turn || turn.isComplete) {
+    return { resolved: false, allSubmitted: false };
+  }
+
+  if (params.turnId && turn.id !== params.turnId) {
+    return { resolved: false, allSubmitted: false };
+  }
+
+  if (
+    turn.phase !== 'order_submission' &&
+    turn.phase !== 'retreat_submission' &&
+    turn.phase !== 'build_submission'
+  ) {
+    return { resolved: false, allSubmitted: false };
+  }
+
+  const allSubmitted = await checkAllSubmitted(room.id, turn.id);
+  if (!allSubmitted) {
+    return { resolved: false, allSubmitted: false };
+  }
+
+  if (turn.phase === 'order_submission') {
+    await resolveOrderSubmissionTurn(room, turn);
+  } else if (turn.phase === 'retreat_submission') {
+    await resolveRetreatSubmissionTurn(room, turn);
+  } else {
+    await resolveBuildSubmissionTurn(room, turn);
+  }
+
+  return { resolved: true, allSubmitted: true };
 }
 
 // --- Submit Orders ---
@@ -179,23 +477,6 @@ export const submitOrders = authed
     if (turn.phase !== 'order_submission') {
       throw new ORPCError('BAD_REQUEST', {
         message: `Current phase is ${turn.phase}, not order_submission`,
-      });
-    }
-
-    // Check if already submitted
-    const existing = await database
-      .select()
-      .from(gameOrderTable)
-      .where(
-        and(
-          eq(gameOrderTable.turnId, turn.id),
-          eq(gameOrderTable.power, power),
-        ),
-      );
-
-    if (existing.length > 0) {
-      throw new ORPCError('CONFLICT', {
-        message: 'You have already submitted orders for this turn',
       });
     }
 
@@ -232,82 +513,17 @@ export const submitOrders = authed
       coast: order.coast,
     }));
 
-    await database.insert(gameOrderTable).values(orderRecords);
+    await replaceOrdersForPower({
+      turnId: turn.id,
+      roomId: room.id,
+      power,
+      records: orderRecords,
+    });
 
-    // Check if all players have submitted
-    const allSubmitted = await checkAllSubmitted(
-      room.id,
-      turn.id,
-      'order_submission',
-    );
-
-    if (allSubmitted) {
-      // Resolve orders
-      const allOrders = await database
-        .select()
-        .from(gameOrderTable)
-        .where(eq(gameOrderTable.turnId, turn.id));
-
-      const allEngineOrders: Order[] = allOrders.map((o) => ({
-        power: o.power as Power,
-        unitType: o.unitType as 'army' | 'fleet',
-        unitProvince: o.unitProvince,
-        orderType: o.orderType as 'hold' | 'move' | 'support' | 'convoy',
-        targetProvince: o.targetProvince,
-        supportedUnitProvince: o.supportedUnitProvince,
-        viaConvoy: o.viaConvoy,
-        coast: o.coast,
-      }));
-
-      const result = await adjudicateMainPhase(positions, allEngineOrders);
-
-      // Store results
-      for (const orderResult of result.orderResults) {
-        const dbOrder = allOrders.find(
-          (o) =>
-            o.unitProvince === orderResult.order.unitProvince &&
-            o.power === orderResult.order.power,
-        );
-        if (dbOrder) {
-          await database.insert(gameOrderResultTable).values({
-            orderId: dbOrder.id,
-            success: orderResult.success,
-            resultType: orderResult.resultType,
-            dislodgedFrom: orderResult.dislodgedFrom ?? null,
-            retreatOptions: orderResult.retreatOptions ?? null,
-          });
-        }
-      }
-
-      await createPhaseResult({
-        roomId: room.id,
-        turn,
-        payload: buildOrderPhaseResultPayload({
-          turn: {
-            id: turn.id,
-            turnNumber: turn.turnNumber,
-            season: turn.season,
-            year: turn.year,
-            phase: turn.phase,
-            unitPositions: positions,
-            supplyCenters: turn.supplyCenters as SupplyCenterOwnership,
-            dislodgedUnits: getTurnDislodgedUnits(turn),
-          },
-          orders: allEngineOrders,
-          orderResults: result.orderResults,
-          resolvedPositions: result.newPositions,
-          dislodgedUnits: result.dislodgedUnits,
-        }),
-      });
-
-      // Advance phase
-      await advancePhase(
-        room.id,
-        turn.id,
-        result.newPositions,
-        result.dislodgedUnits,
-      );
-    }
+    const { allSubmitted } = await resolveTurnIfReady({
+      roomId: room.id,
+      turnId: turn.id,
+    });
 
     publishRoomEvent(room.id, 'submit_orders');
     return { submitted: true, allSubmitted };
@@ -336,22 +552,6 @@ export const submitRetreats = authed
       });
     }
 
-    const existing = await database
-      .select()
-      .from(gameRetreatTable)
-      .where(
-        and(
-          eq(gameRetreatTable.turnId, turn.id),
-          eq(gameRetreatTable.power, power),
-        ),
-      );
-
-    if (existing.length > 0) {
-      throw new ORPCError('CONFLICT', {
-        message: 'You have already submitted retreats for this turn',
-      });
-    }
-
     // Store retreat orders
     const retreatRecords = input.retreats.map((r) => ({
       turnId: turn.id,
@@ -364,64 +564,17 @@ export const submitRetreats = authed
       retreatTo: r.retreatTo,
     }));
 
-    await database.insert(gameRetreatTable).values(retreatRecords);
+    await replaceRetreatsForPower({
+      turnId: turn.id,
+      roomId: room.id,
+      power,
+      records: retreatRecords,
+    });
 
-    // Check if all powers with dislodged units have submitted
-    const powersNeedingRetreats = [
-      ...new Set(dislodgedUnits.map((d) => d.power)),
-    ];
-
-    const submittedRetreats = await database
-      .select({ power: gameRetreatTable.power })
-      .from(gameRetreatTable)
-      .where(eq(gameRetreatTable.turnId, turn.id));
-
-    const submittedPowers = new Set(submittedRetreats.map((r) => r.power));
-    const allSubmitted = powersNeedingRetreats.every((p) =>
-      submittedPowers.has(p),
-    );
-
-    if (allSubmitted) {
-      const allRetreats = await database
-        .select()
-        .from(gameRetreatTable)
-        .where(eq(gameRetreatTable.turnId, turn.id));
-
-      const retreatOrders: RetreatOrder[] = allRetreats.map((r) => ({
-        power: r.power as Power,
-        unitType: r.unitType as 'army' | 'fleet',
-        unitProvince: r.unitProvince,
-        retreatTo: r.retreatTo,
-      }));
-
-      const positions = turn.unitPositions as UnitPositions;
-      const result = await adjudicateRetreatPhase(
-        positions,
-        dislodgedUnits,
-        retreatOrders,
-      );
-
-      await createPhaseResult({
-        roomId: room.id,
-        turn,
-        payload: buildRetreatPhaseResultPayload({
-          turn: {
-            id: turn.id,
-            turnNumber: turn.turnNumber,
-            season: turn.season,
-            year: turn.year,
-            phase: turn.phase,
-            unitPositions: positions,
-            supplyCenters: turn.supplyCenters as SupplyCenterOwnership,
-            dislodgedUnits,
-          },
-          retreats: retreatOrders,
-          result,
-        }),
-      });
-
-      await advancePhase(room.id, turn.id, result.newPositions, []);
-    }
+    const { allSubmitted } = await resolveTurnIfReady({
+      roomId: room.id,
+      turnId: turn.id,
+    });
 
     publishRoomEvent(room.id, 'submit_retreats');
     return { submitted: true, allSubmitted };
@@ -451,22 +604,6 @@ export const submitBuilds = authed
       });
     }
 
-    const existing = await database
-      .select()
-      .from(gameBuildTable)
-      .where(
-        and(
-          eq(gameBuildTable.turnId, turn.id),
-          eq(gameBuildTable.power, power),
-        ),
-      );
-
-    if (existing.length > 0) {
-      throw new ORPCError('CONFLICT', {
-        message: 'You have already submitted builds for this turn',
-      });
-    }
-
     // Store build orders
     const buildRecords = input.builds.map((b) => ({
       turnId: turn.id,
@@ -478,64 +615,17 @@ export const submitBuilds = authed
       coast: b.coast ?? null,
     }));
 
-    await database.insert(gameBuildTable).values(buildRecords);
+    await replaceBuildsForPower({
+      turnId: turn.id,
+      roomId: room.id,
+      power,
+      records: buildRecords,
+    });
 
-    // Check if all powers needing builds/disbands have submitted
-    const powersNeedingAction = buildCounts
-      .filter((bc) => bc.count !== 0)
-      .map((bc) => bc.power);
-
-    const submittedBuilds = await database
-      .select({ power: gameBuildTable.power })
-      .from(gameBuildTable)
-      .where(eq(gameBuildTable.turnId, turn.id));
-
-    const submittedPowers = new Set(submittedBuilds.map((b) => b.power));
-    const allSubmitted = powersNeedingAction.every((p) =>
-      submittedPowers.has(p),
-    );
-
-    if (allSubmitted) {
-      const allBuilds = await database
-        .select()
-        .from(gameBuildTable)
-        .where(eq(gameBuildTable.turnId, turn.id));
-
-      const buildOrders: BuildOrder[] = allBuilds.map((b) => ({
-        power: b.power as Power,
-        action: b.action as 'build' | 'disband' | 'waive',
-        unitType: b.unitType as 'army' | 'fleet' | null,
-        province: b.province,
-        coast: b.coast,
-      }));
-
-      const result = await adjudicateBuildPhase(
-        positions,
-        supplyCenters,
-        buildOrders,
-      );
-
-      await createPhaseResult({
-        roomId: room.id,
-        turn,
-        payload: buildBuildPhaseResultPayload({
-          turn: {
-            id: turn.id,
-            turnNumber: turn.turnNumber,
-            season: turn.season,
-            year: turn.year,
-            phase: turn.phase,
-            unitPositions: positions,
-            supplyCenters,
-            dislodgedUnits: getTurnDislodgedUnits(turn),
-          },
-          builds: buildOrders,
-          result,
-        }),
-      });
-
-      await advancePhase(room.id, turn.id, result.newPositions, []);
-    }
+    const { allSubmitted } = await resolveTurnIfReady({
+      roomId: room.id,
+      turnId: turn.id,
+    });
 
     publishRoomEvent(room.id, 'submit_builds');
     return { submitted: true, allSubmitted };

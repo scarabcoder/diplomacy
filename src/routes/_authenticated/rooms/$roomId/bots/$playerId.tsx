@@ -8,7 +8,7 @@ import {
   WarRoomStage,
 } from '@/components/surfaces/war-room.tsx';
 import type { Power } from '@/domain/game/engine/types.ts';
-import { PowerFlag, PowerName, getPowerLabel } from '@/domain/game/power-presentation.tsx';
+import { PowerName } from '@/domain/game/power-presentation.tsx';
 import { orpcUtils } from '@/rpc/react.ts';
 
 export const Route = createFileRoute(
@@ -71,12 +71,9 @@ function BotInspectionPage() {
           <SectionKicker>Bot Inspection</SectionKicker>
           <h1 className="mt-1 font-display text-3xl text-foreground">
             {botPower ? (
-              <PowerName
-                power={botPower}
-                flagClassName="h-6 w-8"
-              />
+              <PowerName power={botPower} flagClassName="h-6 w-8" />
             ) : (
-              botPlayer?.displayName ?? 'Unknown Bot'
+              (botPlayer?.displayName ?? 'Unknown Bot')
             )}
           </h1>
           <div className="mt-2 flex items-center gap-2">
@@ -213,7 +210,10 @@ function BotInspectionPage() {
                       <span>To:</span>
                       {recipients.length > 0 ? (
                         recipients.map((r: any, i: number) => (
-                          <span key={r.id} className="inline-flex items-center gap-1">
+                          <span
+                            key={r.id}
+                            className="inline-flex items-center gap-1"
+                          >
                             {i > 0 && <span>,</span>}
                             {r.power ? (
                               <PowerName
@@ -263,11 +263,7 @@ function StanceSeal({ stance }: { stance: string }) {
       hostile: 'danger',
     };
 
-  return (
-    <StatusSeal tone={toneMap[stance] ?? 'neutral'}>
-      {stance}
-    </StatusSeal>
-  );
+  return <StatusSeal tone={toneMap[stance] ?? 'neutral'}>{stance}</StatusSeal>;
 }
 
 function TrustIndicator({ trust }: { trust: number }) {

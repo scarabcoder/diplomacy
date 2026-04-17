@@ -106,4 +106,27 @@ describe('resolveOrders', () => {
       resultType: 'executed',
     });
   });
+
+  it('does not persist stray coasts on non-multi-coast fleet moves', () => {
+    const positions: UnitPositions = {
+      ank: { power: 'turkey', unitType: 'fleet', coast: null },
+    };
+
+    const orders: Order[] = [
+      {
+        power: 'turkey',
+        unitType: 'fleet',
+        unitProvince: 'ank',
+        orderType: 'move',
+        targetProvince: 'bla',
+        coast: 'xx',
+      },
+    ];
+
+    const result = resolveOrders(positions, orders);
+
+    expect(result.newPositions).toEqual({
+      bla: { power: 'turkey', unitType: 'fleet', coast: null },
+    });
+  });
 });

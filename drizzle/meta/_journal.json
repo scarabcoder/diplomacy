@@ -64,6 +64,20 @@
       "when": 1776279394702,
       "tag": "0008_aspiring_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776363451259,
+      "tag": "0009_easy_silver_surfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776366394986,
+      "tag": "0010_eager_roulette",
+      "breakpoints": true
     }
   ]
 }

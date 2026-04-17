@@ -1,4 +1,7 @@
-import type { GamePhaseEnum, PowerEnum } from '@/database/schema/game-schema.ts';
+import type {
+  GamePhaseEnum,
+  PowerEnum,
+} from '@/database/schema/game-schema.ts';
 
 // --- Trigger types that activate the bot brain ---
 

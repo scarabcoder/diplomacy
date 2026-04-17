@@ -1,5 +1,6 @@
 import {
   index,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -11,7 +12,11 @@ import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 import * as z from 'zod/v4';
 import { gamePlayerTable, gameRoomTable } from './game-schema.ts';
 
-export const RoomConversationKinds = ['direct', 'group'] as const;
+export const RoomMessageKinds = ['text', 'order_proposal'] as const;
+export type RoomMessageKind = (typeof RoomMessageKinds)[number];
+export const roomMessageKindSchema = z.enum(RoomMessageKinds);
+
+export const RoomConversationKinds = ['direct', 'group', 'global'] as const;
 export const roomConversationKindEnum = pgEnum(
   'room_conversation_kind',
   RoomConversationKinds,
@@ -115,6 +120,8 @@ export const roomMessageTable = pgTable(
       .notNull()
       .references(() => gamePlayerTable.id, { onDelete: 'cascade' }),
     body: text('body').notNull(),
+    kind: text('kind').notNull().default('text'),
+    proposalPayload: jsonb('proposal_payload'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -129,8 +136,9 @@ export const roomMessageTable = pgTable(
   ],
 );
 
-export const roomConversationSelectSchema =
-  createSelectSchema(roomConversationTable);
+export const roomConversationSelectSchema = createSelectSchema(
+  roomConversationTable,
+);
 export const roomConversationInsertSchema = createInsertSchema(
   roomConversationTable,
   {
@@ -150,4 +158,5 @@ export const roomConversationParticipantInsertSchema = createInsertSchema(
 export const roomMessageSelectSchema = createSelectSchema(roomMessageTable);
 export const roomMessageInsertSchema = createInsertSchema(roomMessageTable, {
   body: z.string().trim().min(1, 'Message body is required').max(2000),
+  kind: roomMessageKindSchema,
 }).omit({ id: true, createdAt: true });

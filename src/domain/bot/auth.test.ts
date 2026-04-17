@@ -28,6 +28,8 @@ describe('bot auth helpers', () => {
   it('hashes the same secret deterministically', () => {
     const secret = createBotCredentialSecret();
 
-    expect(hashBotCredentialSecret(secret)).toBe(hashBotCredentialSecret(secret));
+    expect(hashBotCredentialSecret(secret)).toBe(
+      hashBotCredentialSecret(secret),
+    );
   });
 });

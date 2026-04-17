@@ -137,7 +137,10 @@ function HomePage() {
   return (
     <WarRoomStage>
       <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
-        <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': 0 } as CSSProperties}>
+        <ParchmentPanel
+          className="stagger-panel px-5 py-5 sm:px-6"
+          style={{ '--stagger-index': 0 } as CSSProperties}
+        >
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
               <SectionKicker>Rooms</SectionKicker>
@@ -164,7 +167,10 @@ function HomePage() {
         </ParchmentPanel>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(19rem,0.8fr)]">
-          <CommandPanel className="stagger-panel overflow-hidden px-5 py-5 sm:px-6 sm:py-6" style={{ '--stagger-index': 1 } as CSSProperties}>
+          <CommandPanel
+            className="stagger-panel overflow-hidden px-5 py-5 sm:px-6 sm:py-6"
+            style={{ '--stagger-index': 1 } as CSSProperties}
+          >
             <div className="space-y-5">
               <div className="space-y-2">
                 <SectionKicker className="text-[oklch(0.84_0.04_80)] before:bg-[color:color-mix(in_oklab,var(--accent-brass)_72%,white_28%)]">
@@ -215,7 +221,10 @@ function HomePage() {
             </div>
           </CommandPanel>
 
-          <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6 sm:py-6" style={{ '--stagger-index': 2 } as CSSProperties}>
+          <ParchmentPanel
+            className="stagger-panel px-5 py-5 sm:px-6 sm:py-6"
+            style={{ '--stagger-index': 2 } as CSSProperties}
+          >
             <div className="space-y-5">
               <div className="space-y-2">
                 <SectionKicker>Join Room</SectionKicker>
@@ -280,7 +289,10 @@ function HomePage() {
         </div>
 
         {sortedRooms.length === 0 ? (
-          <ParchmentPanel className="stagger-panel px-6 py-8 text-center sm:px-10" style={{ '--stagger-index': 3 } as CSSProperties}>
+          <ParchmentPanel
+            className="stagger-panel px-6 py-8 text-center sm:px-10"
+            style={{ '--stagger-index': 3 } as CSSProperties}
+          >
             <div className="mx-auto max-w-2xl space-y-4">
               <div className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--accent-brass)_28%,white_72%)] text-[color:var(--accent-oxblood)] motion-safe:animate-[gentle-breathe_3s_ease-in-out_infinite]">
                 <ScrollText className="size-7" />
@@ -349,7 +361,10 @@ function RoomListSection({
   staggerIndex?: number;
 }>) {
   return (
-    <ParchmentPanel className="stagger-panel px-5 py-5 sm:px-6" style={{ '--stagger-index': staggerIndex } as CSSProperties}>
+    <ParchmentPanel
+      className="stagger-panel px-5 py-5 sm:px-6"
+      style={{ '--stagger-index': staggerIndex } as CSSProperties}
+    >
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">

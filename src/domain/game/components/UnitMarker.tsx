@@ -1,9 +1,6 @@
 import { memo } from 'react';
 import { POWER_COLORS, type Power } from '@/domain/game/engine/types.ts';
-import {
-  BattleshipTokenGlyph,
-  TankTokenGlyph,
-} from './unit-token-icons.tsx';
+import { BattleshipTokenGlyph, TankTokenGlyph } from './unit-token-icons.tsx';
 
 interface UnitMarkerProps {
   cx: number;

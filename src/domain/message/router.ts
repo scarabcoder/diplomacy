@@ -4,6 +4,7 @@ import {
   markThreadRead,
   openOrCreateThread,
   sendMessage,
+  sendOrderProposal,
   startTyping,
   watchMessageEvents,
 } from './procedures.ts';
@@ -17,6 +18,10 @@ export const messageRouter = {
   ),
   getThread: withBotMcpTool(getThread, 'message.getThread'),
   sendMessage: withBotMcpTool(sendMessage, 'message.sendMessage'),
+  sendOrderProposal: withBotMcpTool(
+    sendOrderProposal,
+    'message.sendOrderProposal',
+  ),
   markThreadRead: withBotMcpTool(markThreadRead, 'message.markThreadRead'),
   startTyping,
   watchMessageEvents,

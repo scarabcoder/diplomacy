@@ -29,7 +29,9 @@ export async function closeDatabase() {
 
   globalThis.__diplomacyDatabaseClosePromise__ = (async () => {
     const db = await databasePromise;
-    await (db as { $client?: { close?: () => Promise<void> } }).$client?.close?.();
+    await (
+      db as { $client?: { close?: () => Promise<void> } }
+    ).$client?.close?.();
   })();
 
   return globalThis.__diplomacyDatabaseClosePromise__;

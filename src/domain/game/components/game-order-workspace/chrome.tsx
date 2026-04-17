@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Brain, MessageSquare, Users, X } from 'lucide-react';
+import { Brain, History, MessageSquare, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button.tsx';
 import { PowerFlag } from '@/domain/game/power-presentation.tsx';
 import { cn } from '@/lib/utils.ts';
@@ -156,7 +156,8 @@ function HeaderStatusChip({
     <span
       className={cn(
         'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold tracking-[0.08em] shadow-sm',
-        compact && 'flex-1 justify-center gap-1.5 px-2 py-1.5 md:flex-initial md:gap-2 md:px-3.5',
+        compact &&
+          'flex-1 justify-center gap-1.5 px-2 py-1.5 md:flex-initial md:gap-2 md:px-3.5',
         className,
       )}
     >
@@ -209,7 +210,12 @@ function getPlayersWindowMetrics(playersWindowSections: PlayersWindowSections) {
     (player) => player.submissionState === 'submitted',
   );
   const standbyPlayers = activePlayers.filter(
-    (player) => player.submissionState === null,
+    (player) =>
+      player.submissionState === null && player.status !== 'eliminated',
+  );
+  const eliminatedPlayers = activePlayers.filter(
+    (player) =>
+      player.submissionState === null && player.status === 'eliminated',
   );
   const trackedPlayers = pendingPlayers.length + submittedPlayers.length;
 
@@ -224,6 +230,8 @@ function getPlayersWindowMetrics(playersWindowSections: PlayersWindowSections) {
     submittedCount: submittedPlayers.length,
     standbyPlayers,
     standbyCount: standbyPlayers.length,
+    eliminatedPlayers,
+    eliminatedCount: eliminatedPlayers.length,
     trackedPlayers,
     hasSubmissionTracking: trackedPlayers > 0,
   };
@@ -431,6 +439,8 @@ function PlayersWindowCard({
     submittedCount,
     standbyPlayers,
     standbyCount,
+    eliminatedPlayers,
+    eliminatedCount,
     hasSubmissionTracking,
   } = getPlayersWindowMetrics(playersWindowSections);
   const subtitle =
@@ -560,6 +570,21 @@ function PlayersWindowCard({
               onMessagePlayer={onMessagePlayer}
               onInspectBot={onInspectBot}
             />
+            <PlayersWindowSection
+              title="Eliminated"
+              subtitle={
+                eliminatedCount > 0
+                  ? formatRosterCount(
+                      eliminatedCount,
+                      'eliminated power',
+                      'eliminated powers',
+                    )
+                  : undefined
+              }
+              players={eliminatedPlayers}
+              onMessagePlayer={onMessagePlayer}
+              onInspectBot={onInspectBot}
+            />
           </>
         ) : (
           <PlayersWindowSection
@@ -613,7 +638,7 @@ function PlayersWindowLayer({
 
   return (
     <div ref={panelRef}>
-      <div className="pointer-events-none absolute right-0 top-[calc(100%+0.75rem)] z-30 hidden motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:fill-mode-both sm:block">
+      <div className="pointer-events-none fixed right-4 top-16 z-30 hidden motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:fill-mode-both sm:block">
         <PlayersWindowCard
           onClose={onClose}
           playersWindowSections={playersWindowSections}
@@ -667,6 +692,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
   onToggleMessages,
   onClosePlayersWindow,
   onTogglePlayersWindow,
+  onOpenHistory,
 }: {
   roomName: string;
   roomCode: string;
@@ -682,6 +708,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
   onToggleMessages: () => void;
   onClosePlayersWindow: () => void;
   onTogglePlayersWindow: () => void;
+  onOpenHistory?: () => void;
 }) {
   const playersButtonRef = useRef<HTMLButtonElement | null>(null);
   const playersWindowRef = useRef<HTMLDivElement | null>(null);
@@ -775,6 +802,25 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({
             <span>{bannerMeta}</span>
           </div>
           <div className="flex flex-1 items-center justify-end gap-1.5 md:flex-none md:gap-2">
+            {onOpenHistory ? (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="View phase history"
+                onClick={onOpenHistory}
+                className="h-9 min-w-0 justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.08] px-2 text-white/82 shadow-sm transition duration-200 ease-out hover:bg-white/[0.14] hover:text-white focus-visible:bg-white/[0.14] focus-visible:text-white md:h-11 md:min-w-[6rem] md:justify-start md:gap-2.5 md:px-3"
+              >
+                <History className="size-4 shrink-0" />
+                <span className="hidden min-w-0 flex-1 md:block">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
+                    History
+                  </span>
+                  <span className="block text-sm font-semibold leading-tight text-white">
+                    Replay
+                  </span>
+                </span>
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="ghost"

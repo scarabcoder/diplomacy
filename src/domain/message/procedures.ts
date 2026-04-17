@@ -11,26 +11,127 @@ import { selectOne } from '@/database/helpers.ts';
 import {
   gamePlayerTable,
   gameRoomTable,
+  gameTurnTable,
 } from '@/database/schema/game-schema.ts';
 import {
   roomConversationParticipantTable,
   roomConversationTable,
   roomMessageTable,
 } from '@/database/schema/message-schema.ts';
+import { PROVINCES } from '@/domain/game/engine/map-data.ts';
+import type { OrderProposalPayload } from './schema.ts';
 import {
   getThreadSchema,
   listThreadsSchema,
   markThreadReadSchema,
   openOrCreateThreadSchema,
   sendMessageSchema,
+  sendOrderProposalSchema,
   startTypingSchema,
   watchMessageEventsSchema,
 } from './schema.ts';
-import { publishMessageEvent, publishTypingEvent, watchMessageEventStream } from './realtime.ts';
-import { buildParticipantKey, canAccessMessages, canWriteMessages } from './utils.ts';
+import {
+  publishMessageEvent,
+  publishTypingEvent,
+  watchMessageEventStream,
+} from './realtime.ts';
+import {
+  buildParticipantKey,
+  canAccessMessages,
+  canWriteMessages,
+} from './utils.ts';
 
 const TYPING_THROTTLE_MS = 3_000;
 const typingTimestamps = new Map<string, number>();
+
+export const GLOBAL_PARTICIPANT_KEY = 'global';
+
+/**
+ * Create the single per-room "global chat" conversation if it doesn't exist
+ * yet, enrolling every non-spectator player as a participant. Idempotent —
+ * safe to call at game start or lazily thereafter.
+ */
+export async function ensureGlobalConversation(params: {
+  roomId: string;
+  createdByPlayerId: string;
+}): Promise<string> {
+  const existing = await selectOne(
+    database
+      .select()
+      .from(roomConversationTable)
+      .where(
+        and(
+          eq(roomConversationTable.roomId, params.roomId),
+          eq(roomConversationTable.kind, 'global'),
+        ),
+      ),
+  );
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const players = await database
+    .select({ id: gamePlayerTable.id })
+    .from(gamePlayerTable)
+    .where(
+      and(
+        eq(gamePlayerTable.roomId, params.roomId),
+        eq(gamePlayerTable.isSpectator, false),
+      ),
+    );
+
+  if (players.length === 0) {
+    throw new ORPCError('BAD_REQUEST', {
+      message: 'Cannot create global chat without any players',
+    });
+  }
+
+  const [conversation] = await database
+    .insert(roomConversationTable)
+    .values({
+      roomId: params.roomId,
+      participantKey: GLOBAL_PARTICIPANT_KEY,
+      kind: 'global',
+      status: 'active',
+      createdByPlayerId: params.createdByPlayerId,
+      lastMessageAt: null,
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  await database.insert(roomConversationParticipantTable).values(
+    players.map((player) => ({
+      conversationId: conversation!.id,
+      playerId: player.id,
+    })),
+  );
+
+  publishMessageEvent(params.roomId, 'thread_created', conversation!.id);
+  return conversation!.id;
+}
+
+export async function resolveGlobalThreadId(roomId: string): Promise<string> {
+  const existing = await selectOne(
+    database
+      .select({ id: roomConversationTable.id })
+      .from(roomConversationTable)
+      .where(
+        and(
+          eq(roomConversationTable.roomId, roomId),
+          eq(roomConversationTable.kind, 'global'),
+        ),
+      ),
+  );
+
+  if (!existing) {
+    throw new ORPCError('NOT_FOUND', {
+      message: 'Global chat is not available for this room yet',
+    });
+  }
+
+  return existing.id;
+}
 
 async function getMessageContext(roomId: string, actor: RpcActor) {
   const room = await selectOne(
@@ -60,12 +161,14 @@ function assertCanWriteMessages(params: {
   room: typeof gameRoomTable.$inferSelect;
   player: typeof gamePlayerTable.$inferSelect;
 }) {
-  if (!canWriteMessages({
-    roomStatus: params.room.status,
-    playerStatus: params.player.status,
-    isSpectator: params.player.isSpectator,
-    isBot: params.player.isBot,
-  })) {
+  if (
+    !canWriteMessages({
+      roomStatus: params.room.status,
+      playerStatus: params.player.status,
+      isSpectator: params.player.isSpectator,
+      isBot: params.player.isBot,
+    })
+  ) {
     const message =
       params.room.status === 'completed'
         ? 'This room is complete and all conversations are read-only'
@@ -91,7 +194,10 @@ async function getAccessibleConversation(params: {
       .from(roomConversationParticipantTable)
       .innerJoin(
         roomConversationTable,
-        eq(roomConversationTable.id, roomConversationParticipantTable.conversationId),
+        eq(
+          roomConversationTable.id,
+          roomConversationParticipantTable.conversationId,
+        ),
       )
       .where(
         and(
@@ -120,11 +226,14 @@ async function getConversationParticipantIds(conversationIds: string[]) {
       playerId: roomConversationParticipantTable.playerId,
     })
     .from(roomConversationParticipantTable)
-    .where(inArray(roomConversationParticipantTable.conversationId, conversationIds));
+    .where(
+      inArray(roomConversationParticipantTable.conversationId, conversationIds),
+    );
 
   const participantIdsByConversation = new Map<string, string[]>();
   for (const row of rows) {
-    const playerIds = participantIdsByConversation.get(row.conversationId) ?? [];
+    const playerIds =
+      participantIdsByConversation.get(row.conversationId) ?? [];
     playerIds.push(row.playerId);
     participantIdsByConversation.set(row.conversationId, playerIds);
   }
@@ -203,6 +312,9 @@ async function buildThreadSummary(params: {
             id: params.lastMessage.id,
             senderPlayerId: params.lastMessage.senderPlayerId,
             body: params.lastMessage.body,
+            kind: (params.lastMessage.kind ?? 'text') as
+              | 'text'
+              | 'order_proposal',
             createdAt: params.lastMessage.createdAt,
           },
     lastMessageAt: params.conversation.lastMessageAt,
@@ -225,7 +337,10 @@ export const listThreads = authed
       .from(roomConversationParticipantTable)
       .innerJoin(
         roomConversationTable,
-        eq(roomConversationTable.id, roomConversationParticipantTable.conversationId),
+        eq(
+          roomConversationTable.id,
+          roomConversationParticipantTable.conversationId,
+        ),
       )
       .where(eq(roomConversationParticipantTable.playerId, player.id))
       .orderBy(
@@ -234,9 +349,8 @@ export const listThreads = authed
       );
 
     const conversationIds = rows.map((row) => row.conversation.id);
-    const participantIdsByConversation = await getConversationParticipantIds(
-      conversationIds,
-    );
+    const participantIdsByConversation =
+      await getConversationParticipantIds(conversationIds);
     const lastMessageById = await getLastMessages(
       rows
         .map((row) => row.conversation.lastMessageId)
@@ -250,7 +364,8 @@ export const listThreads = authed
           currentPlayer: player,
           conversation: row.conversation,
           participant: row.participant,
-          participantIds: participantIdsByConversation.get(row.conversation.id) ?? [],
+          participantIds:
+            participantIdsByConversation.get(row.conversation.id) ?? [],
           lastMessage:
             row.conversation.lastMessageId == null
               ? null
@@ -270,7 +385,9 @@ export const openOrCreateThread = authed
     assertCanWriteMessages({ room, player });
 
     const participantPlayerIds = [
-      ...new Set(input.participantPlayerIds.filter((playerId) => playerId !== player.id)),
+      ...new Set(
+        input.participantPlayerIds.filter((playerId) => playerId !== player.id),
+      ),
     ];
 
     if (participantPlayerIds.length === 0) {
@@ -311,7 +428,10 @@ export const openOrCreateThread = authed
       });
     }
 
-    const allParticipantIds = [player.id, ...otherPlayers.map((otherPlayer) => otherPlayer.id)];
+    const allParticipantIds = [
+      player.id,
+      ...otherPlayers.map((otherPlayer) => otherPlayer.id),
+    ];
     const participantKey = buildParticipantKey(allParticipantIds);
     const existingConversation = await selectOne(
       database
@@ -332,7 +452,10 @@ export const openOrCreateThread = authed
           .from(roomConversationParticipantTable)
           .where(
             and(
-              eq(roomConversationParticipantTable.conversationId, existingConversation.id),
+              eq(
+                roomConversationParticipantTable.conversationId,
+                existingConversation.id,
+              ),
               eq(roomConversationParticipantTable.playerId, player.id),
             ),
           ),
@@ -345,12 +468,14 @@ export const openOrCreateThread = authed
       const lastMessage =
         existingConversation.lastMessageId == null
           ? null
-          : (await selectOne(
+          : ((await selectOne(
               database
                 .select()
                 .from(roomMessageTable)
-                .where(eq(roomMessageTable.id, existingConversation.lastMessageId)),
-            )) ?? null;
+                .where(
+                  eq(roomMessageTable.id, existingConversation.lastMessageId),
+                ),
+            )) ?? null);
 
       return {
         thread: await buildThreadSummary({
@@ -391,7 +516,10 @@ export const openOrCreateThread = authed
         .from(roomConversationParticipantTable)
         .where(
           and(
-            eq(roomConversationParticipantTable.conversationId, conversation!.id),
+            eq(
+              roomConversationParticipantTable.conversationId,
+              conversation!.id,
+            ),
             eq(roomConversationParticipantTable.playerId, player.id),
           ),
         ),
@@ -460,7 +588,9 @@ export const getThread = authed
       .limit(input.limit + 1);
 
     const hasMore = messageRows.length > input.limit;
-    const visibleRows = (hasMore ? messageRows.slice(0, input.limit) : messageRows)
+    const visibleRows = (
+      hasMore ? messageRows.slice(0, input.limit) : messageRows
+    )
       .slice()
       .reverse();
 
@@ -487,9 +617,12 @@ export const getThread = authed
         id: message.id,
         senderPlayerId: message.senderPlayerId,
         body: message.body,
+        kind: (message.kind ?? 'text') as 'text' | 'order_proposal',
+        proposalPayload: (message.proposalPayload ??
+          null) as OrderProposalPayload | null,
         createdAt: message.createdAt,
       })),
-      nextCursor: hasMore ? visibleRows[0]?.id ?? null : null,
+      nextCursor: hasMore ? (visibleRows[0]?.id ?? null) : null,
       hasMore,
     };
   });
@@ -512,6 +645,8 @@ export const sendMessage = authed
         message: 'This conversation is read-only',
       });
     }
+
+    const isGlobal = conversation.kind === 'global';
 
     const [message] = await database
       .insert(roomMessageTable)
@@ -547,16 +682,161 @@ export const sendMessage = authed
 
     publishMessageEvent(input.roomId, 'message_sent', input.threadId);
 
-    // Notify bot participants to respond
-    import('@/domain/bot/brain/bot-triggers.ts').then(({ onMessageReceived }) => {
-      onMessageReceived(input.roomId, input.threadId, player.id);
-    });
+    // Notify bot participants to respond — but skip for global chat to avoid
+    // spam loops. Bots pick up global statements on their next scheduled trigger.
+    if (!isGlobal) {
+      import('@/domain/bot/brain/bot-triggers.ts').then(
+        ({ onMessageReceived }) => {
+          onMessageReceived(input.roomId, input.threadId, player.id);
+        },
+      );
+    }
 
     return {
       message: {
         id: message!.id,
         senderPlayerId: message!.senderPlayerId,
         body: message!.body,
+        kind: 'text' as const,
+        proposalPayload: null as OrderProposalPayload | null,
+        createdAt: message!.createdAt,
+      },
+    };
+  });
+
+export const sendOrderProposal = authed
+  .input(sendOrderProposalSchema)
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    const { room, player } = await getMessageContext(input.roomId, actor);
+    assertCanWriteMessages({ room, player });
+
+    const { conversation } = await getAccessibleConversation({
+      roomId: input.roomId,
+      playerId: player.id,
+      threadId: input.threadId,
+    });
+
+    if (conversation.status !== 'active') {
+      throw new ORPCError('BAD_REQUEST', {
+        message: 'This conversation is read-only',
+      });
+    }
+
+    if (!room.currentTurnId || room.currentTurnId !== input.proposal.turnId) {
+      throw new ORPCError('BAD_REQUEST', {
+        message:
+          'This proposal is for a phase that has already advanced. Start a new proposal against the current phase.',
+      });
+    }
+
+    const currentTurn = await selectOne(
+      database
+        .select()
+        .from(gameTurnTable)
+        .where(eq(gameTurnTable.id, input.proposal.turnId)),
+    );
+
+    if (!currentTurn) {
+      throw new ORPCError('NOT_FOUND', { message: 'Turn not found' });
+    }
+
+    if (currentTurn.phase !== input.proposal.phase) {
+      throw new ORPCError('BAD_REQUEST', {
+        message: 'Proposal phase does not match the current turn phase',
+      });
+    }
+
+    const positions = input.proposal.boardBefore.positions;
+    for (const order of input.proposal.orders) {
+      if ('unitProvince' in order) {
+        if (!positions[order.unitProvince]) {
+          throw new ORPCError('BAD_REQUEST', {
+            message: `No unit at ${order.unitProvince} in the proposed board state`,
+          });
+        }
+      }
+
+      const targetProvince =
+        'targetProvince' in order
+          ? order.targetProvince
+          : 'retreatTo' in order
+            ? order.retreatTo
+            : 'province' in order
+              ? order.province
+              : null;
+      if (targetProvince) {
+        const base = targetProvince.split('/')[0]!;
+        if (!PROVINCES[base]) {
+          throw new ORPCError('BAD_REQUEST', {
+            message: `Unknown province: ${targetProvince}`,
+          });
+        }
+      }
+
+      if ('supportedUnitProvince' in order && order.supportedUnitProvince) {
+        const base = order.supportedUnitProvince.split('/')[0]!;
+        if (!PROVINCES[base]) {
+          throw new ORPCError('BAD_REQUEST', {
+            message: `Unknown province: ${order.supportedUnitProvince}`,
+          });
+        }
+      }
+    }
+
+    const isGlobal = conversation.kind === 'global';
+
+    const [message] = await database
+      .insert(roomMessageTable)
+      .values({
+        roomId: input.roomId,
+        conversationId: input.threadId,
+        senderPlayerId: player.id,
+        body: input.body.trim(),
+        kind: 'order_proposal',
+        proposalPayload: input.proposal,
+      })
+      .returning();
+
+    await database
+      .update(roomConversationTable)
+      .set({
+        lastMessageId: message!.id,
+        lastMessageAt: message!.createdAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(roomConversationTable.id, input.threadId));
+
+    await database
+      .update(roomConversationParticipantTable)
+      .set({
+        lastReadMessageId: message!.id,
+        lastReadAt: message!.createdAt,
+      })
+      .where(
+        and(
+          eq(roomConversationParticipantTable.conversationId, input.threadId),
+          eq(roomConversationParticipantTable.playerId, player.id),
+        ),
+      );
+
+    publishMessageEvent(input.roomId, 'message_sent', input.threadId);
+
+    if (!isGlobal) {
+      import('@/domain/bot/brain/bot-triggers.ts').then(
+        ({ onMessageReceived }) => {
+          onMessageReceived(input.roomId, input.threadId, player.id);
+        },
+      );
+    }
+
+    return {
+      message: {
+        id: message!.id,
+        senderPlayerId: message!.senderPlayerId,
+        body: message!.body,
+        kind: 'order_proposal' as const,
+        proposalPayload: input.proposal,
         createdAt: message!.createdAt,
       },
     };
@@ -602,7 +882,10 @@ export const markThreadRead = authed
               .select()
               .from(roomMessageTable)
               .where(eq(roomMessageTable.conversationId, input.threadId))
-              .orderBy(desc(roomMessageTable.createdAt), desc(roomMessageTable.id)),
+              .orderBy(
+                desc(roomMessageTable.createdAt),
+                desc(roomMessageTable.id),
+              ),
           )
         : await selectOne(
             database

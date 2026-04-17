@@ -182,7 +182,10 @@ export const getRoom = authed
 export const watchRoomPageState = authed
   .input(watchRoomPageStateSchema)
   .handler(async ({ input, context: { request, userSession } }) => {
-    const membership = await getRoomMembership(input.roomId, userSession.user.id);
+    const membership = await getRoomMembership(
+      input.roomId,
+      userSession.user.id,
+    );
 
     if (!membership) {
       throw new ORPCError('FORBIDDEN', {
@@ -399,10 +402,20 @@ export const startGame = authed
         .where(eq(gamePlayerTable.id, player.id));
     }
 
+    // Create the per-room global chat thread with all non-spectator players
+    // enrolled as participants.
+    const { ensureGlobalConversation } =
+      await import('@/domain/message/procedures.ts');
+    await ensureGlobalConversation({
+      roomId: input.roomId,
+      createdByPlayerId: membership!.id,
+    });
+
     publishRoomEvent(input.roomId, 'start_game');
 
     // Activate AI bots after game starts
-    const { onGameStarted } = await import('@/domain/bot/brain/bot-triggers.ts');
+    const { onGameStarted } =
+      await import('@/domain/bot/brain/bot-triggers.ts');
     onGameStarted(input.roomId);
 
     return { room: { ...room, status: 'playing' as const }, turn: turn! };
@@ -530,7 +543,10 @@ export const finalizePhase = authed
       throw new ORPCError('NOT_FOUND', { message: 'Room not found' });
     }
 
-    const membership = await getRoomMembership(input.roomId, userSession.user.id);
+    const membership = await getRoomMembership(
+      input.roomId,
+      userSession.user.id,
+    );
     assertRoomCreator(membership, 'finalize the phase');
 
     if (room.status !== 'playing') {
@@ -558,15 +574,25 @@ export const finalizePhase = authed
       });
     }
 
-    const submissionPhases = ['order_submission', 'retreat_submission', 'build_submission'];
+    const submissionPhases = [
+      'order_submission',
+      'retreat_submission',
+      'build_submission',
+    ];
     if (!submissionPhases.includes(turn.phase)) {
       throw new ORPCError('BAD_REQUEST', {
         message: 'Current phase is not a submission phase',
       });
     }
 
-    const { onFinalizePhase } = await import('@/domain/bot/brain/bot-triggers.ts');
+    const { onFinalizePhase } =
+      await import('@/domain/bot/brain/bot-triggers.ts');
+    const { resolveTurnIfReady } = await import('@/domain/order/procedures.ts');
     await onFinalizePhase(input.roomId);
+    await resolveTurnIfReady({
+      roomId: input.roomId,
+      turnId: turn.id,
+    });
 
     publishRoomEvent(input.roomId, 'finalize_phase');
     return { finalized: true };

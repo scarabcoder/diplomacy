@@ -1,9 +1,9 @@
 import { chat, maxIterations } from '@tanstack/ai';
-import { createAnthropicChat } from '@tanstack/ai-anthropic';
 import { and, eq } from 'drizzle-orm';
 import { database } from '@/database/database.ts';
 import { gamePlayerTable } from '@/database/schema/game-schema.ts';
 import type { PowerEnum } from '@/database/schema/game-schema.ts';
+import { getAiTemperatureOptions } from '@/lib/ai-text.ts';
 import { createLogger } from '@/lib/logger.ts';
 import {
   generateActivityTagline,
@@ -13,37 +13,57 @@ import {
 import { loadBotSession } from './bot-context.ts';
 import { getOrCreateBrainState } from './bot-memory.ts';
 import { parseObservations, parseRelationships } from './bot-memory.ts';
-import { buildBotSystemPrompt, buildTriggerMessage, type PlayerInfo } from './bot-prompts.ts';
+import {
+  createBotTextAdapter,
+  getBotAiModelOptions,
+  resolveBotAiConfig,
+} from './bot-ai.ts';
+import {
+  buildBotSystemPrompt,
+  buildTriggerMessage,
+  type PlayerInfo,
+} from './bot-prompts.ts';
 import { createBotTools } from './bot-tools.ts';
 import type { BotBrainParams } from './types.ts';
 
 const logger = createLogger('bot-brain');
 
-const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
-const MAX_STEPS_INITIAL = 30; // more steps for game_start (lots of diplomacy)
-const MAX_STEPS_DEFAULT = 20;
-const MAX_STEPS_FINALIZE = 10; // fewer steps for urgent finalization
+type BotActivationBudget = {
+  maxSteps: number;
+  maxTokens: number;
+};
 
-function getModel() {
-  return process.env.BOT_AI_MODEL || DEFAULT_MODEL;
-}
-
-function getApiKey(): string {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is required for AI bots');
-  }
-  return key;
-}
-
-function getMaxSteps(trigger: BotBrainParams['trigger']): number {
+export function getBotActivationBudget(
+  trigger: BotBrainParams['trigger'],
+): BotActivationBudget {
   switch (trigger.type) {
     case 'game_start':
-      return MAX_STEPS_INITIAL;
+      return {
+        maxSteps: 18,
+        maxTokens: 10_000,
+      };
+    case 'message_received':
+      return {
+        maxSteps: 6,
+        maxTokens: 2_000,
+      };
+    case 'phase_change':
+      if (trigger.phase === 'order_submission') {
+        return {
+          maxSteps: 12,
+          maxTokens: 6_000,
+        };
+      }
+
+      return {
+        maxSteps: 4,
+        maxTokens: 1_200,
+      };
     case 'finalize_phase':
-      return MAX_STEPS_FINALIZE;
-    default:
-      return MAX_STEPS_DEFAULT;
+      return {
+        maxSteps: 3,
+        maxTokens: 600,
+      };
   }
 }
 
@@ -104,7 +124,12 @@ export async function activateBotBrain(params: BotBrainParams): Promise<void> {
 
   // Load or create brain state (memory)
   log.debug('Loading brain state from database...');
-  const brainState = await getOrCreateBrainState({ playerId, roomId, botId, power });
+  const brainState = await getOrCreateBrainState({
+    playerId,
+    roomId,
+    botId,
+    power,
+  });
   const observations = parseObservations(brainState.observations);
   const relationships = parseRelationships(brainState.relationships);
   log.debug(
@@ -136,7 +161,10 @@ export async function activateBotBrain(params: BotBrainParams): Promise<void> {
 
   // Build trigger-specific user message
   const triggerMessage = buildTriggerMessage(trigger);
-  log.debug({ triggerMessageLength: triggerMessage.length }, 'Trigger message built');
+  log.debug(
+    { triggerMessageLength: triggerMessage.length },
+    'Trigger message built',
+  );
 
   // Create tools
   const tools = createBotTools({
@@ -144,14 +172,18 @@ export async function activateBotBrain(params: BotBrainParams): Promise<void> {
     roomId,
     playerId,
     power,
+    trigger,
   });
-  log.debug({ toolCount: tools.length, toolNames: tools.map((t) => t.name) }, 'Tools created');
+  log.debug(
+    { toolCount: tools.length, toolNames: tools.map((t) => t.name) },
+    'Tools created',
+  );
 
   // Create the adapter with the configured model
-  const model = getModel();
-  const apiKey = getApiKey();
-  const adapter = createAnthropicChat(model as any, apiKey);
-  const maxSteps = getMaxSteps(trigger);
+  const { model, provider } = resolveBotAiConfig();
+  const adapter = createBotTextAdapter();
+  const { maxSteps, maxTokens } = getBotActivationBudget(trigger);
+  const temperatureOptions = getAiTemperatureOptions(provider, 0.7);
 
   // Generate and publish activity tagline so players can see what the bot is doing
   const tagline = await generateActivityTagline(power, trigger);
@@ -161,7 +193,7 @@ export async function activateBotBrain(params: BotBrainParams): Promise<void> {
   publishRoomEvent(roomId, 'bot_activity');
 
   log.info(
-    { model, maxSteps, temperature: 0.7, maxTokens: 50_000 },
+    { model, provider, maxSteps, ...temperatureOptions, maxTokens },
     'Starting AI chat agent loop',
   );
 
@@ -174,8 +206,9 @@ export async function activateBotBrain(params: BotBrainParams): Promise<void> {
       messages: [{ role: 'user', content: triggerMessage }],
       tools,
       agentLoopStrategy: maxIterations(maxSteps),
-      maxTokens: 50_000,
-      temperature: 0.7,
+      maxTokens,
+      ...temperatureOptions,
+      modelOptions: getBotAiModelOptions(process.env),
     });
 
     // Consume the stream to drive tool execution and log chunk types
@@ -190,10 +223,16 @@ export async function activateBotBrain(params: BotBrainParams): Promise<void> {
 
       if (chunkType === 'text-delta' || chunkType === 'TEXT_CONTENT') {
         textChunks++;
-      } else if (chunkType === 'tool-call-begin' || chunkType === 'TOOL_CALL_START') {
+      } else if (
+        chunkType === 'tool-call-begin' ||
+        chunkType === 'TOOL_CALL_START'
+      ) {
         toolCallStarts++;
         log.debug(
-          { toolName: (chunk as any).toolName ?? (chunk as any).name, step: toolCallStarts },
+          {
+            toolName: (chunk as any).toolName ?? (chunk as any).name,
+            step: toolCallStarts,
+          },
           'AI calling tool',
         );
       } else if (chunkType === 'tool-result' || chunkType === 'TOOL_CALL_END') {

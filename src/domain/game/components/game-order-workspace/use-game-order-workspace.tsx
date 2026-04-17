@@ -167,7 +167,7 @@ export function useGameOrderWorkspace({
     turn.phase,
   ]);
 
-  const isLocked = didSubmit || hasPersistedSubmission;
+  const hasSubmittedSubmission = didSubmit || hasPersistedSubmission;
   const activeMutation =
     turn.phase === 'order_submission'
       ? submitOrdersMutation
@@ -234,7 +234,7 @@ export function useGameOrderWorkspace({
         : [];
 
   const selectMainUnit = (province: string) => {
-    if (isLocked || !myPower || positions[province]?.power !== myPower) {
+    if (!myPower || positions[province]?.power !== myPower) {
       return;
     }
 
@@ -243,7 +243,7 @@ export function useGameOrderWorkspace({
   };
 
   const handleMainUnitClick = (province: string) => {
-    if (isLocked || !myPower) {
+    if (!myPower) {
       return;
     }
 
@@ -283,7 +283,7 @@ export function useGameOrderWorkspace({
   };
 
   const handleMainProvinceClick = (provinceRef: string) => {
-    if (isLocked || !myPower) {
+    if (!myPower) {
       return;
     }
 
@@ -334,7 +334,7 @@ export function useGameOrderWorkspace({
   };
 
   const handleRetreatUnitClick = (province: string) => {
-    if (isLocked || !needsRetreatOrders) {
+    if (!needsRetreatOrders) {
       return;
     }
 
@@ -345,7 +345,7 @@ export function useGameOrderWorkspace({
   };
 
   const handleRetreatProvinceClick = (provinceRef: string) => {
-    if (isLocked || retreatInteraction.kind !== 'unit') {
+    if (retreatInteraction.kind !== 'unit') {
       return;
     }
 
@@ -395,7 +395,7 @@ export function useGameOrderWorkspace({
   };
 
   const handleBuildUnitClick = (province: string) => {
-    if (isLocked || !myBuildCount || myBuildCount.count >= 0) {
+    if (!myBuildCount || myBuildCount.count >= 0) {
       return;
     }
 
@@ -432,7 +432,7 @@ export function useGameOrderWorkspace({
       : getEligibleBuildProvinces(myPower, myBuildCount);
 
   const handleBuildProvinceClick = (provinceRef: string) => {
-    if (isLocked || !myBuildCount || myBuildCount.count <= 0) {
+    if (!myBuildCount || myBuildCount.count <= 0) {
       return;
     }
 
@@ -510,7 +510,6 @@ export function useGameOrderWorkspace({
         ? true
         : currentDisbands.length === disbandsRequired;
   const canSubmitCurrentPhase =
-    !isLocked &&
     !isSpectator &&
     !!myPower &&
     (turn.phase === 'order_submission' ||
@@ -588,7 +587,7 @@ export function useGameOrderWorkspace({
       : null;
 
   const handleSubmit = async () => {
-    if (!myPower || isLocked) {
+    if (!myPower) {
       return;
     }
 
@@ -601,6 +600,7 @@ export function useGameOrderWorkspace({
           targetProvince: draft?.targetProvince ?? undefined,
           supportedUnitProvince: draft?.supportedUnitProvince ?? undefined,
           viaConvoy: draft?.viaConvoy || undefined,
+          coast: undefined,
         };
       });
 
@@ -624,6 +624,7 @@ export function useGameOrderWorkspace({
               ...Array.from({ length: remainingBuilds }, () => ({
                 action: 'waive' as const,
                 province: getDefaultWaiveProvince(myPower),
+                coast: undefined,
               })),
             ]
           : currentDisbands.map((build) => ({
@@ -833,7 +834,7 @@ export function useGameOrderWorkspace({
   };
 
   const canEditSelectedMainUnit =
-    !!selectedMainProvince && !isLocked && !isSpectator && !!myPower;
+    !!selectedMainProvince && !isSpectator && !!myPower;
   const canHoldSelectedMainUnit = canEditSelectedMainUnit;
   const canMoveSelectedMainUnit =
     (mainInteraction.kind === 'move' && !mainInteraction.viaConvoy) ||
@@ -860,18 +861,16 @@ export function useGameOrderWorkspace({
       PROVINCES[selectedMainProvince]?.type === 'water' &&
       selectedMainConvoyableArmies.length > 0);
   const canStepBackMainInteraction =
-    mainInteraction.kind !== 'idle' && !isLocked && !isSpectator && !!myPower;
+    mainInteraction.kind !== 'idle' && !isSpectator && !!myPower;
   const canChooseRetreatAction =
     retreatInteraction.kind === 'unit' &&
-    !isLocked &&
     !isSpectator &&
     !!myPower &&
     needsRetreatOrders;
   const canChooseBuildSiteAction =
-    buildInteraction.kind === 'site' && !isLocked && !isSpectator && !!myPower;
+    buildInteraction.kind === 'site' && !isSpectator && !!myPower;
   const canChooseBuildDisbandAction =
     buildInteraction.kind === 'disband' &&
-    !isLocked &&
     !isSpectator &&
     !!myPower &&
     needsBuildOrders;
@@ -1178,7 +1177,7 @@ export function useGameOrderWorkspace({
     myPower,
     myBuildCount,
     isSpectator,
-    isLocked,
+    hasSubmittedSubmission,
     needsRetreatOrders,
     needsBuildOrders,
     isOrderSubmission,
@@ -1235,7 +1234,6 @@ export function useGameOrderWorkspace({
     mainPanelProps: {
       isSpectator,
       myPower,
-      isLocked,
       mainInteraction,
       positions,
       mainValidTargets,
@@ -1248,7 +1246,6 @@ export function useGameOrderWorkspace({
       isSpectator,
       myPower,
       needsRetreatOrders,
-      isLocked,
       retreatInteraction,
       dislodgedUnits: turn.dislodgedUnits,
       getRetreatDescription: (province: string) =>
@@ -1259,7 +1256,6 @@ export function useGameOrderWorkspace({
       myPower,
       needsBuildOrders,
       myBuildCount,
-      isLocked,
       progress: buildProgress,
       buildInteraction,
       buildChoiceMode,

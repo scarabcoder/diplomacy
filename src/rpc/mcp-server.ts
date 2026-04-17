@@ -351,27 +351,26 @@ export async function handleAuthenticatedMcpRequest(
 
     const server = createBotMcpServer(botSession);
     let registeredSessionId: string | undefined;
-    let transportRef: WebStandardStreamableHTTPServerTransport | undefined;
 
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (newSessionId) => {
-        registeredSessionId = newSessionId;
-        registerBotMcpSession({
-          sessionId: newSessionId,
-          botSession,
-          server,
-          transport: transportRef!,
-          roomPageStateUri: getRoomPageStateUri(botSession.roomId),
-          messageEventsUri: getMessageEventsUri(botSession.roomId),
-        });
-      },
-      onsessionclosed: async (closedSessionId) => {
-        removeBotMcpSession(closedSessionId);
-        await server.close();
-      },
-    });
-    transportRef = transport;
+    const transport: WebStandardStreamableHTTPServerTransport =
+      new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (newSessionId) => {
+          registeredSessionId = newSessionId;
+          registerBotMcpSession({
+            sessionId: newSessionId,
+            botSession,
+            server,
+            transport,
+            roomPageStateUri: getRoomPageStateUri(botSession.roomId),
+            messageEventsUri: getMessageEventsUri(botSession.roomId),
+          });
+        },
+        onsessionclosed: async (closedSessionId) => {
+          removeBotMcpSession(closedSessionId);
+          await server.close();
+        },
+      });
 
     await server.connect(transport);
 

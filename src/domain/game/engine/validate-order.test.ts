@@ -62,4 +62,27 @@ describe('validateOrder', () => {
 
     expect(result).toEqual({ valid: true });
   });
+
+  it('rejects a coast suffix for non-multi-coast fleet moves', () => {
+    const result = validateOrder(
+      {
+        ank: { power: 'turkey', unitType: 'fleet', coast: null },
+      },
+      {
+        power: 'turkey',
+        unitType: 'fleet',
+        unitProvince: 'ank',
+        orderType: 'move',
+        targetProvince: 'bla',
+        supportedUnitProvince: null,
+        viaConvoy: false,
+        coast: 'xx',
+      },
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      reason: 'bla does not accept a coast specification',
+    });
+  });
 });

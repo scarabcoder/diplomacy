@@ -31,7 +31,10 @@ export function enqueueActivation(
   const previous = activationQueues.get(playerId) ?? Promise.resolve();
 
   if (isQueued) {
-    logger.debug({ playerId, ...tag }, 'Queuing activation behind running task');
+    logger.debug(
+      { playerId, ...tag },
+      'Queuing activation behind running task',
+    );
   } else {
     logger.debug({ playerId, ...tag }, 'Enqueuing activation (queue empty)');
   }
@@ -65,15 +68,24 @@ export function enqueueActivationDebounced(
 ): void {
   const existing = messageDebounceTimers.get(playerId);
   if (existing) {
-    logger.debug({ playerId, ...tag, debounceMs: MESSAGE_DEBOUNCE_MS }, 'Resetting debounce timer (new message arrived)');
+    logger.debug(
+      { playerId, ...tag, debounceMs: MESSAGE_DEBOUNCE_MS },
+      'Resetting debounce timer (new message arrived)',
+    );
     clearTimeout(existing);
   } else {
-    logger.debug({ playerId, ...tag, debounceMs: MESSAGE_DEBOUNCE_MS }, 'Starting debounce timer');
+    logger.debug(
+      { playerId, ...tag, debounceMs: MESSAGE_DEBOUNCE_MS },
+      'Starting debounce timer',
+    );
   }
 
   const timer = setTimeout(() => {
     messageDebounceTimers.delete(playerId);
-    logger.debug({ playerId, ...tag }, 'Debounce timer fired — enqueuing activation');
+    logger.debug(
+      { playerId, ...tag },
+      'Debounce timer fired — enqueuing activation',
+    );
     void enqueueActivation(playerId, fn, tag);
   }, MESSAGE_DEBOUNCE_MS);
 
@@ -97,7 +109,13 @@ async function runWithRetry(
       if (attempt < RETRY_DELAYS_MS.length) {
         const delay = RETRY_DELAYS_MS[attempt]!;
         logger.warn(
-          { playerId, ...tag, attempt: attempt + 1, retryInMs: delay, err: error },
+          {
+            playerId,
+            ...tag,
+            attempt: attempt + 1,
+            retryInMs: delay,
+            err: error,
+          },
           'Activation failed — retrying after delay',
         );
         await new Promise((r) => setTimeout(r, delay));
@@ -125,24 +143,44 @@ async function runWithTimeout(
   const controller = new AbortController();
   const startTime = Date.now();
 
-  logger.debug({ playerId, ...tag, timeoutMs: ACTIVATION_TIMEOUT_MS }, 'Starting activation with timeout');
+  logger.debug(
+    { playerId, ...tag, timeoutMs: ACTIVATION_TIMEOUT_MS },
+    'Starting activation with timeout',
+  );
 
   const timeoutId = setTimeout(() => {
     const elapsed = Date.now() - startTime;
-    logger.warn({ playerId, ...tag, elapsedMs: elapsed, timeoutMs: ACTIVATION_TIMEOUT_MS }, 'Bot activation timed out — aborting');
+    logger.warn(
+      {
+        playerId,
+        ...tag,
+        elapsedMs: elapsed,
+        timeoutMs: ACTIVATION_TIMEOUT_MS,
+      },
+      'Bot activation timed out — aborting',
+    );
     controller.abort();
   }, ACTIVATION_TIMEOUT_MS);
 
   try {
     await fn();
     const durationMs = Date.now() - startTime;
-    logger.debug({ playerId, ...tag, durationMs }, 'Activation completed within timeout');
+    logger.debug(
+      { playerId, ...tag, durationMs },
+      'Activation completed within timeout',
+    );
   } catch (error) {
     const durationMs = Date.now() - startTime;
     if (controller.signal.aborted) {
-      logger.error({ playerId, ...tag, durationMs }, 'Bot activation aborted after timeout');
+      logger.error(
+        { playerId, ...tag, durationMs },
+        'Bot activation aborted after timeout',
+      );
     } else {
-      logger.error({ playerId, ...tag, durationMs, err: error }, 'Bot activation failed with error');
+      logger.error(
+        { playerId, ...tag, durationMs, err: error },
+        'Bot activation failed with error',
+      );
     }
     throw error;
   } finally {

@@ -80,7 +80,6 @@ export function BuildProgressCard({
 export function MainActionPanel({
   isSpectator,
   myPower,
-  isLocked,
   mainInteraction,
   positions,
   mainValidTargets,
@@ -91,7 +90,6 @@ export function MainActionPanel({
 }: {
   isSpectator: boolean;
   myPower: Power | null;
-  isLocked: boolean;
   mainInteraction: MainInteraction;
   positions: UnitPositions;
   mainValidTargets: string[];
@@ -104,14 +102,6 @@ export function MainActionPanel({
     return (
       <p className="text-sm text-muted-foreground">
         Spectators can inspect the board but cannot submit orders.
-      </p>
-    );
-  }
-
-  if (isLocked) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Orders submitted. Waiting for the rest of the board.
       </p>
     );
   }
@@ -284,7 +274,6 @@ export function RetreatActionPanel({
   isSpectator,
   myPower,
   needsRetreatOrders,
-  isLocked,
   retreatInteraction,
   dislodgedUnits,
   getRetreatDescription,
@@ -292,7 +281,6 @@ export function RetreatActionPanel({
   isSpectator: boolean;
   myPower: Power | null;
   needsRetreatOrders: boolean;
-  isLocked: boolean;
   retreatInteraction: RetreatInteraction;
   dislodgedUnits: DislodgedUnit[];
   getRetreatDescription: (province: string) => string;
@@ -309,14 +297,6 @@ export function RetreatActionPanel({
     return (
       <p className="text-sm text-muted-foreground">
         You have no units to retreat this phase.
-      </p>
-    );
-  }
-
-  if (isLocked) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Retreats submitted. Waiting for the board to resolve.
       </p>
     );
   }
@@ -361,7 +341,6 @@ export function BuildActionPanel({
   myPower,
   needsBuildOrders,
   myBuildCount,
-  isLocked,
   progress,
   buildInteraction,
   buildChoiceMode,
@@ -374,7 +353,6 @@ export function BuildActionPanel({
   myPower: Power | null;
   needsBuildOrders: boolean;
   myBuildCount: { count: number } | null;
-  isLocked: boolean;
   progress: BuildProgressState;
   buildInteraction: BuildInteraction;
   buildChoiceMode: 'army' | 'fleet' | null;
@@ -396,17 +374,6 @@ export function BuildActionPanel({
       <p className="text-sm text-muted-foreground">
         You have no build or disband decisions this phase.
       </p>
-    );
-  }
-
-  if (isLocked) {
-    return (
-      <div className="space-y-3">
-        <BuildProgressCard progress={progress} />
-        <p className="text-sm text-muted-foreground">
-          Build submission locked. Waiting for the phase to resolve.
-        </p>
-      </div>
     );
   }
 
@@ -543,7 +510,7 @@ export function SubmitPanel({
   summaryLines,
   submissionStatus,
   errorMessage,
-  isLocked,
+  hasSubmittedSubmission,
   isPending,
   onSubmit,
 }: {
@@ -555,7 +522,7 @@ export function SubmitPanel({
   summaryLines: string[];
   submissionStatus: SubmissionStatus | null;
   errorMessage: string | null;
-  isLocked: boolean;
+  hasSubmittedSubmission: boolean;
   isPending: boolean;
   onSubmit: () => void;
 }) {
@@ -566,7 +533,9 @@ export function SubmitPanel({
           ? 'Spectators can inspect the board but cannot submit orders.'
           : isSubmissionOpen
             ? canSubmitCurrentPhase
-              ? 'Review your draft, then submit when ready.'
+              ? hasSubmittedSubmission
+                ? 'Submitted. You can still edit and resubmit until the phase resolves.'
+                : 'Review your draft, then submit when ready.'
               : 'Complete the required selections before submitting.'
             : 'No submission is open while the board resolves.'}
       </div>
@@ -607,20 +576,24 @@ export function SubmitPanel({
       {errorMessage ? (
         <p className="text-sm text-destructive">{errorMessage}</p>
       ) : null}
-      {isLocked ? (
+      {hasSubmittedSubmission ? (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
-          Submitted.
+          Current submission is confirmed. Changes remain editable until the
+          phase resolves.
         </div>
-      ) : (
-        <Button
-          type="button"
-          className="w-full"
-          disabled={!canSubmitCurrentPhase || isPending}
-          onClick={onSubmit}
-        >
-          {isPending ? 'Submitting...' : 'Submit'}
-        </Button>
-      )}
+      ) : null}
+      <Button
+        type="button"
+        className="w-full"
+        disabled={!canSubmitCurrentPhase || isPending}
+        onClick={onSubmit}
+      >
+        {isPending
+          ? 'Submitting...'
+          : hasSubmittedSubmission
+            ? 'Update Submission'
+            : 'Submit'}
+      </Button>
     </div>
   );
 }

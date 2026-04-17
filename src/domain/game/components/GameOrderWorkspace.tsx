@@ -84,7 +84,7 @@ export function GameOrderWorkspace(props: GameOrderWorkspaceProps) {
                       ? workspace.activeMutation.error.message
                       : null
                   }
-                  isLocked={workspace.isLocked}
+                  hasSubmittedSubmission={workspace.hasSubmittedSubmission}
                   isPending={workspace.activeMutation.isPending}
                   onSubmit={() => void workspace.handleSubmit()}
                 />
@@ -115,6 +115,7 @@ export function GameOrderWorkspace(props: GameOrderWorkspaceProps) {
         onTogglePlayersWindow={() =>
           workspace.setIsPlayersWindowOpen(!workspace.isPlayersWindowOpen)
         }
+        onOpenHistory={props.onOpenHistory}
       />
 
       <div className="absolute inset-0 pt-14 sm:pt-12">

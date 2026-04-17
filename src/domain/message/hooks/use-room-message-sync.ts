@@ -31,52 +31,50 @@ export function useRoomMessageSync(roomId: string, enabled = true) {
     setTypingByThread(new Map());
   }, [clearAllTypingTimers]);
 
-  const addTypingPlayer = useCallback(
-    (threadId: string, playerId: string) => {
-      // Clear existing expiry timer for this player/thread
-      const threadTimers =
-        typingTimersRef.current.get(threadId) ?? new Map<string, ReturnType<typeof setTimeout>>();
-      const existing = threadTimers.get(playerId);
-      if (existing) {
-        clearTimeout(existing);
+  const addTypingPlayer = useCallback((threadId: string, playerId: string) => {
+    // Clear existing expiry timer for this player/thread
+    const threadTimers =
+      typingTimersRef.current.get(threadId) ??
+      new Map<string, ReturnType<typeof setTimeout>>();
+    const existing = threadTimers.get(playerId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+
+    // Set new expiry timer
+    const timer = setTimeout(() => {
+      threadTimers.delete(playerId);
+      if (threadTimers.size === 0) {
+        typingTimersRef.current.delete(threadId);
       }
-
-      // Set new expiry timer
-      const timer = setTimeout(() => {
-        threadTimers.delete(playerId);
-        if (threadTimers.size === 0) {
-          typingTimersRef.current.delete(threadId);
-        }
-        setTypingByThread((prev) => {
-          const next = new Map(prev);
-          const players = (next.get(threadId) ?? []).filter(
-            (id) => id !== playerId,
-          );
-          if (players.length === 0) {
-            next.delete(threadId);
-          } else {
-            next.set(threadId, players);
-          }
-          return next;
-        });
-      }, TYPING_EXPIRY_MS);
-
-      threadTimers.set(playerId, timer);
-      typingTimersRef.current.set(threadId, threadTimers);
-
-      // Update state
       setTypingByThread((prev) => {
-        const players = prev.get(threadId) ?? [];
-        if (players.includes(playerId)) {
-          return prev;
-        }
         const next = new Map(prev);
-        next.set(threadId, [...players, playerId]);
+        const players = (next.get(threadId) ?? []).filter(
+          (id) => id !== playerId,
+        );
+        if (players.length === 0) {
+          next.delete(threadId);
+        } else {
+          next.set(threadId, players);
+        }
         return next;
       });
-    },
-    [],
-  );
+    }, TYPING_EXPIRY_MS);
+
+    threadTimers.set(playerId, timer);
+    typingTimersRef.current.set(threadId, threadTimers);
+
+    // Update state
+    setTypingByThread((prev) => {
+      const players = prev.get(threadId) ?? [];
+      if (players.includes(playerId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(threadId, [...players, playerId]);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
@@ -98,8 +96,9 @@ export function useRoomMessageSync(roomId: string, enabled = true) {
 
     const invalidateRoomMessageQueries = (threadId: string | null) => {
       void queryClient.invalidateQueries({
-        queryKey: orpcUtils.message.listThreads.queryOptions({ input: { roomId } })
-          .queryKey,
+        queryKey: orpcUtils.message.listThreads.queryOptions({
+          input: { roomId },
+        }).queryKey,
       });
 
       if (!threadId) {
@@ -142,11 +141,7 @@ export function useRoomMessageSync(roomId: string, enabled = true) {
         onEvent: (event) => {
           retryCount = 0;
 
-          if (
-            event.cause === 'typing' &&
-            event.playerId &&
-            event.threadId
-          ) {
+          if (event.cause === 'typing' && event.playerId && event.threadId) {
             addTypingPlayer(event.threadId, event.playerId);
             return;
           }

@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { database } from '@/database/database.ts';
 import {
   roomConversationParticipantTable,
@@ -51,7 +51,12 @@ export async function archiveConversationsForEliminatedPlayers(
         roomConversationParticipantTable.conversationId,
       ),
     )
-    .where(inArray(roomConversationParticipantTable.playerId, playerIds));
+    .where(
+      and(
+        inArray(roomConversationParticipantTable.playerId, playerIds),
+        ne(roomConversationTable.kind, 'global'),
+      ),
+    );
 
   await archiveConversationIds(
     roomId,

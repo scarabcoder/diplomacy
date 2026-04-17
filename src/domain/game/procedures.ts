@@ -18,16 +18,14 @@ import {
   gamePhaseResultTable,
 } from '@/database/schema/game-schema.ts';
 import { selectOne } from '@/database/helpers.ts';
-import type {
-  UnitPositions,
-  SupplyCenterOwnership,
-  DislodgedUnit,
-} from '@/domain/game/engine/types.ts';
-import { calculateBuildCounts } from '@/domain/game/engine/resolve-builds.ts';
+import type { Power } from '@/domain/game/engine/types.ts';
 import { getGameStateSnapshot } from '@/domain/room/live-state.ts';
+import type { GamePhaseResultPayload } from '@/domain/game/phase-results.ts';
+import { getPowersRequiringSubmission } from '@/domain/game/submission-requirements.ts';
 import {
   getGameStateSchema,
   getGameHistorySchema,
+  getPhaseResultHistorySchema,
   getSubmissionStatusSchema,
   acknowledgePhaseResultSchema,
 } from './schema.ts';
@@ -105,6 +103,33 @@ export const getGameHistory = authed
     return history;
   });
 
+// --- Get Phase Result History ---
+export const getPhaseResultHistory = authed
+  .input(getPhaseResultHistorySchema)
+  .handler(async ({ input, context }) => {
+    const actor = requireRpcActor(context);
+    await requireRoomMembershipForActor(input.roomId, actor);
+
+    const results = await database
+      .select({
+        id: gamePhaseResultTable.id,
+        turnNumber: gamePhaseResultTable.turnNumber,
+        year: gamePhaseResultTable.year,
+        season: gamePhaseResultTable.season,
+        phase: gamePhaseResultTable.phase,
+        payload: gamePhaseResultTable.payload,
+        createdAt: gamePhaseResultTable.createdAt,
+      })
+      .from(gamePhaseResultTable)
+      .where(eq(gamePhaseResultTable.roomId, input.roomId))
+      .orderBy(gamePhaseResultTable.createdAt);
+
+    return results.map((r) => ({
+      ...r,
+      payload: r.payload as GamePhaseResultPayload,
+    }));
+  });
+
 // --- Get Submission Status ---
 export const getSubmissionStatus = authed
   .input(getSubmissionStatusSchema)
@@ -144,11 +169,10 @@ export const getSubmissionStatus = authed
         ),
       );
 
-    const activePowers = activePlayers
-      .filter((p) => p.power && p.status === 'active')
-      .map((p) => p.power!);
+    const requiredPowers = getPowersRequiringSubmission(turn, activePlayers);
 
-    let submittedPowers: string[] = [];
+    const requiredPowerSet = new Set(requiredPowers);
+    let submittedPowers: Power[] = [];
 
     if (turn.phase === 'order_submission') {
       const orders = await database
@@ -156,46 +180,32 @@ export const getSubmissionStatus = authed
         .from(gameOrderTable)
         .where(eq(gameOrderTable.turnId, turn.id));
 
-      submittedPowers = [...new Set(orders.map((order) => order.power))];
+      submittedPowers = [...new Set(orders.map((order) => order.power))].filter(
+        (power): power is Power => requiredPowerSet.has(power as Power),
+      );
     } else if (turn.phase === 'retreat_submission') {
       const retreats = await database
         .select({ power: gameRetreatTable.power })
         .from(gameRetreatTable)
         .where(eq(gameRetreatTable.turnId, turn.id));
-      const retreatPowers = [
-        ...new Set(
-          ((turn.dislodgedUnits as DislodgedUnit[] | null) ?? []).map(
-            (unit) => unit.power,
-          ),
-        ),
-      ].filter((power) => activePowers.includes(power));
       submittedPowers = [
         ...new Set(retreats.map((retreat) => retreat.power)),
-      ].filter((power) => retreatPowers.includes(power));
+      ].filter((power): power is Power => requiredPowerSet.has(power as Power));
     } else if (turn.phase === 'build_submission') {
-      const buildCounts = calculateBuildCounts(
-        turn.unitPositions as UnitPositions,
-        turn.supplyCenters as SupplyCenterOwnership,
-      );
-      const buildPowers = buildCounts
-        .filter(
-          (count) => count.count !== 0 && activePowers.includes(count.power),
-        )
-        .map((count) => count.power);
       const builds = await database
         .select({ power: gameBuildTable.power })
         .from(gameBuildTable)
         .where(eq(gameBuildTable.turnId, turn.id));
       submittedPowers = [...new Set(builds.map((build) => build.power))].filter(
-        (power) => buildPowers.includes(power),
+        (power): power is Power => requiredPowerSet.has(power as Power),
       );
     }
 
     return {
       phase: turn.phase,
       submitted: submittedPowers,
-      pending: activePowers.filter((p) => !submittedPowers.includes(p)),
-      allSubmitted: activePowers.every((p) => submittedPowers.includes(p)),
+      pending: requiredPowers.filter((p) => !submittedPowers.includes(p)),
+      allSubmitted: requiredPowers.every((p) => submittedPowers.includes(p)),
     };
   });
 

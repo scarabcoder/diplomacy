@@ -74,6 +74,7 @@ export interface GamePhaseResultPayload {
   year: number;
   phase: ResolvedSubmissionPhase;
   headline: string;
+  historicalNarration: string | null;
   winnerPower: Power | null;
   boardBefore: PhaseResultBoardSnapshot;
   boardAfter: PhaseResultBoardSnapshot;
@@ -411,6 +412,7 @@ export function buildOrderPhaseResultPayload(input: {
       input.turn.season,
       input.turn.year,
     ),
+    historicalNarration: null,
     winnerPower: checkVictory(boardAfter.supplyCenters),
     boardBefore: cloneBoardSnapshot(boardBefore),
     boardAfter: cloneBoardSnapshot(boardAfter),
@@ -483,6 +485,7 @@ export function buildRetreatPhaseResultPayload(input: {
       input.turn.season,
       input.turn.year,
     ),
+    historicalNarration: null,
     winnerPower: checkVictory(boardAfter.supplyCenters),
     boardBefore: cloneBoardSnapshot(boardBefore),
     boardAfter: cloneBoardSnapshot(boardAfter),
@@ -572,6 +575,7 @@ export function buildBuildPhaseResultPayload(input: {
       input.turn.season,
       input.turn.year,
     ),
+    historicalNarration: null,
     winnerPower: checkVictory(boardAfter.supplyCenters),
     boardBefore: cloneBoardSnapshot(boardBefore),
     boardAfter: cloneBoardSnapshot(boardAfter),

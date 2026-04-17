@@ -61,6 +61,7 @@ describe('phase result payloads', () => {
 
     expect(payload.boardAfter.positions.par?.power).toBe('france');
     expect(payload.boardAfter.supplyCenters.par).toBe('france');
+    expect(payload.historicalNarration).toBeNull();
     expect(payload.groups[0]?.items[0]).toMatchObject({
       status: 'success',
       detail: 'Executed',
@@ -132,6 +133,7 @@ describe('phase result payloads', () => {
         ],
       },
     ]);
+    expect(payload.historicalNarration).toBeNull();
   });
 
   it('categorizes retreat failures and disbands', () => {
@@ -199,6 +201,7 @@ describe('phase result payloads', () => {
       detail: 'Rejected: invalid retreat destination',
       status: 'failure',
     });
+    expect(payload.historicalNarration).toBeNull();
   });
 
   it('tracks executed, rejected, and waived build adjustments', () => {
@@ -264,6 +267,14 @@ describe('phase result payloads', () => {
     expect(
       payload.groups.find((group) => group.id === 'info')?.items[0]?.detail,
     ).toBe('Build waived');
+    expect(payload.historicalNarration).toBeNull();
+
+    const narratedPayload = {
+      ...payload,
+      historicalNarration:
+        'France tightened its hold in the west while Germany absorbed the losses.',
+    };
+    expect(narratedPayload.historicalNarration).toContain('France');
   });
 });
 

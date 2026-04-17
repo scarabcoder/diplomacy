@@ -182,11 +182,11 @@ export const USER_FACING_MCP_EXCLUDED_TOOLS = [
 
 ## AI Assistant Pipeline
 
-The built-in AI assistant uses `@tanstack/ai` with the `@tanstack/ai-anthropic` adapter to stream responses and invoke tools:
+The built-in AI assistant uses `@tanstack/ai` with a provider-specific adapter. The bot implementation supports both Anthropic and OpenAI through TanStack AI, with runtime selection based on environment configuration:
 
 ```typescript
 const result = await chat({
-  adapter: anthropicText(getModel()),  // e.g., claude-sonnet-4-5
+  adapter: createBotTextAdapter(),  // resolves Anthropic or OpenAI from env
   stream: true,
   maxTokens: 5120,
   messages: toChatMessages(messages),

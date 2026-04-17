@@ -104,9 +104,27 @@ function validateMove(
       return { valid: false, reason: 'Fleets cannot move to inland provinces' };
     }
 
+    const specifiedCoast = order.coast?.trim().toLowerCase() || null;
+    const validCoasts = targetProvince.coasts ?? [];
+    if (specifiedCoast) {
+      if (validCoasts.length === 0) {
+        return {
+          valid: false,
+          reason: `${target} does not accept a coast specification`,
+        };
+      }
+
+      if (!validCoasts.includes(specifiedCoast)) {
+        return {
+          valid: false,
+          reason: `${specifiedCoast} is not a valid coast for ${target}`,
+        };
+      }
+    }
+
     // For multi-coast destination, coast must be specified if there are multiple options
     if (isMultiCoast(target) && targetProvince.type === 'coastal') {
-      if (!order.coast) {
+      if (!specifiedCoast) {
         // Check if only one coast is reachable — if so, auto-infer is OK during resolution
         // For validation, we'll be lenient and allow it
       }

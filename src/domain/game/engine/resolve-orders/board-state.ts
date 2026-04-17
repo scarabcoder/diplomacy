@@ -102,17 +102,19 @@ export function buildNewPositions(
         continue;
       }
 
-      let newCoast = internalOrder.order.coast ?? null;
+      let newCoast: string | null = null;
       if (
         internalOrder.order.unitType === 'fleet' &&
-        isMultiCoast(destination) &&
-        !newCoast
+        isMultiCoast(destination)
       ) {
-        newCoast = inferCoast(
-          internalOrder.order.unitProvince,
-          destination,
-          unit.coast ?? null,
-        );
+        newCoast = internalOrder.order.coast ?? null;
+        if (!newCoast) {
+          newCoast = inferCoast(
+            internalOrder.order.unitProvince,
+            destination,
+            unit.coast ?? null,
+          );
+        }
       }
 
       newPositions[destination] = {

@@ -5,7 +5,6 @@ import { selectOne } from '@/database/helpers.ts';
 import {
   gameBuildTable,
   gameOrderTable,
-  gamePlayerTable,
   gameRetreatTable,
   gameRoomTable,
   gameTurnTable,
@@ -35,8 +34,8 @@ const logger = createLogger('bot-fallback');
  * - Retreat phase: disband all dislodged units
  * - Build phase: waive builds or disband excess units
  *
- * Silently returns if the bot has already submitted or the game state
- * doesn't require submission from this power.
+ * Silently returns if the bot already has a submission for this phase or the
+ * game state doesn't require submission from this power.
  */
 export async function submitFallbackOrders(params: {
   playerId: string;
@@ -80,6 +79,13 @@ export async function submitFallbackOrders(params: {
   const supplyCenters = turn.supplyCenters as SupplyCenterOwnership;
   const p = power as Power;
 
+  if (await hasExistingSubmission(turn.id, turn.phase, p)) {
+    log.info(
+      'Bot already submitted — keeping existing fallback-safe submission',
+    );
+    return;
+  }
+
   try {
     if (turn.phase === 'order_submission') {
       await submitFallbackMainOrders(roomId, p, positions, context, log);
@@ -97,10 +103,13 @@ export async function submitFallbackOrders(params: {
         log,
       );
     } else {
-      log.debug({ phase: turn.phase }, 'Not a submission phase — no fallback needed');
+      log.debug(
+        { phase: turn.phase },
+        'Not a submission phase — no fallback needed',
+      );
     }
   } catch (error) {
-    // Catch CONFLICT (already submitted) gracefully
+    // A stale concurrent submission should not block phase recovery.
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes('already submitted')) {
       log.info('Bot already submitted — fallback not needed');
@@ -108,6 +117,47 @@ export async function submitFallbackOrders(params: {
       log.error({ err: error }, 'Fallback submission failed');
     }
   }
+}
+
+async function hasExistingSubmission(
+  turnId: string,
+  phase: string,
+  power: Power,
+): Promise<boolean> {
+  if (phase === 'order_submission') {
+    const existing = await database
+      .select({ id: gameOrderTable.id })
+      .from(gameOrderTable)
+      .where(
+        and(eq(gameOrderTable.turnId, turnId), eq(gameOrderTable.power, power)),
+      );
+    return existing.length > 0;
+  }
+
+  if (phase === 'retreat_submission') {
+    const existing = await database
+      .select({ id: gameRetreatTable.id })
+      .from(gameRetreatTable)
+      .where(
+        and(
+          eq(gameRetreatTable.turnId, turnId),
+          eq(gameRetreatTable.power, power),
+        ),
+      );
+    return existing.length > 0;
+  }
+
+  if (phase === 'build_submission') {
+    const existing = await database
+      .select({ id: gameBuildTable.id })
+      .from(gameBuildTable)
+      .where(
+        and(eq(gameBuildTable.turnId, turnId), eq(gameBuildTable.power, power)),
+      );
+    return existing.length > 0;
+  }
+
+  return false;
 }
 
 async function submitFallbackMainOrders(
@@ -129,13 +179,18 @@ async function submitFallbackMainOrders(
   const orders = myUnits.map((province) => ({
     unitProvince: province,
     orderType: 'hold' as const,
+    coast: undefined,
   }));
 
   log.info({ unitCount: orders.length }, 'Submitting fallback HOLD orders');
-  await call(submitOrders, { roomId, orders }, {
-    context,
-    path: ['order', 'submitOrders'],
-  });
+  await call(
+    submitOrders,
+    { roomId, orders },
+    {
+      context,
+      path: ['order', 'submitOrders'],
+    },
+  );
   log.info('Fallback orders submitted');
 }
 
@@ -158,11 +213,18 @@ async function submitFallbackRetreats(
     retreatTo: null, // disband
   }));
 
-  log.info({ unitCount: retreats.length }, 'Submitting fallback DISBAND retreats');
-  await call(submitRetreats, { roomId, retreats }, {
-    context,
-    path: ['order', 'submitRetreats'],
-  });
+  log.info(
+    { unitCount: retreats.length },
+    'Submitting fallback DISBAND retreats',
+  );
+  await call(
+    submitRetreats,
+    { roomId, retreats },
+    {
+      context,
+      path: ['order', 'submitRetreats'],
+    },
+  );
   log.info('Fallback retreats submitted');
 }
 
@@ -186,15 +248,16 @@ async function submitFallbackBuilds(
     action: 'build' | 'disband' | 'waive';
     province: string;
     unitType?: 'army' | 'fleet';
-    coast?: string;
+    coast: string | undefined;
   }> = [];
 
   if (myBuildCount.count > 0) {
     // Can build — waive all builds (safest fallback)
     for (let i = 0; i < myBuildCount.count; i++) {
-      const province = myBuildCount.availableHomeSCs[i] ?? myBuildCount.availableHomeSCs[0];
+      const province =
+        myBuildCount.availableHomeSCs[i] ?? myBuildCount.availableHomeSCs[0];
       if (province) {
-        builds.push({ action: 'waive', province });
+        builds.push({ action: 'waive', province, coast: undefined });
       }
     }
     log.info({ waiveCount: builds.length }, 'Submitting fallback WAIVE builds');
@@ -206,16 +269,27 @@ async function submitFallbackBuilds(
     const disbandCount = Math.abs(myBuildCount.count);
 
     for (let i = 0; i < disbandCount && i < myUnits.length; i++) {
-      builds.push({ action: 'disband', province: myUnits[i]! });
+      builds.push({
+        action: 'disband',
+        province: myUnits[i]!,
+        coast: undefined,
+      });
     }
-    log.info({ disbandCount: builds.length }, 'Submitting fallback DISBAND builds');
+    log.info(
+      { disbandCount: builds.length },
+      'Submitting fallback DISBAND builds',
+    );
   }
 
   if (builds.length > 0) {
-    await call(submitBuilds, { roomId, builds }, {
-      context,
-      path: ['order', 'submitBuilds'],
-    });
+    await call(
+      submitBuilds,
+      { roomId, builds },
+      {
+        context,
+        path: ['order', 'submitBuilds'],
+      },
+    );
     log.info('Fallback builds submitted');
   }
 }

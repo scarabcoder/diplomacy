@@ -8,12 +8,14 @@ type BotFacingMcpToolName =
   | 'room.setReady'
   | 'game.getGameState'
   | 'game.getGameHistory'
+  | 'game.getPhaseResultHistory'
   | 'game.getSubmissionStatus'
   | 'game.acknowledgePhaseResult'
   | 'message.listThreads'
   | 'message.openOrCreateThread'
   | 'message.getThread'
   | 'message.sendMessage'
+  | 'message.sendOrderProposal'
   | 'message.markThreadRead'
   | 'order.submitOrders'
   | 'order.submitRetreats'
@@ -54,6 +56,11 @@ export const BOT_MCP_TOOL_DEFINITIONS: Record<
       'List completed turns, submitted orders, and order results for the bot seat room.',
     annotations: readOnlyAnnotations(),
   },
+  'game.getPhaseResultHistory': {
+    description:
+      'List every published phase result payload in chronological order for the bot seat room.',
+    annotations: readOnlyAnnotations(),
+  },
   'game.getSubmissionStatus': {
     description:
       'Get which powers are submitted or pending in the current phase for the bot seat room.',
@@ -80,6 +87,10 @@ export const BOT_MCP_TOOL_DEFINITIONS: Record<
   'message.sendMessage': {
     description:
       'Send a private message into an existing room conversation as the current bot player.',
+  },
+  'message.sendOrderProposal': {
+    description:
+      'Send a structured, visualizable order proposal into a room conversation as the current bot player. The proposal includes proposed orders and a snapshot of the current board state.',
   },
   'message.markThreadRead': {
     description:

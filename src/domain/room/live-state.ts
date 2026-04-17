@@ -18,8 +18,10 @@ import { getBotActivities } from '@/domain/bot/brain/bot-activity.ts';
 import { calculateBuildCounts } from '@/domain/game/engine/resolve-builds.ts';
 import type { GamePhaseResultPayload } from '@/domain/game/phase-results.ts';
 import { selectPendingPhaseResult } from '@/domain/game/phase-results.ts';
+import { getPowersRequiringSubmission } from '@/domain/game/submission-requirements.ts';
 import type {
   DislodgedUnit,
+  Power,
   SupplyCenterOwnership,
   UnitPositions,
 } from '@/domain/game/engine/types.ts';
@@ -138,12 +140,11 @@ export async function getGameStateSnapshot(
       ),
     );
 
-  const activePowers = activePlayers
-    .filter((player) => player.power && player.status === 'active')
-    .map((player) => player.power!);
+  const requiredPowers = getPowersRequiringSubmission(turn, activePlayers);
+  const requiredPowerSet = new Set(requiredPowers);
 
-  let submitted: string[] = [];
-  let pending: string[] = [];
+  let submitted: Power[] = [];
+  let pending: Power[] = [];
   let mySubmission:
     | {
         phase: 'order_submission';
@@ -165,8 +166,10 @@ export async function getGameStateSnapshot(
       .from(gameOrderTable)
       .where(eq(gameOrderTable.turnId, turn.id));
 
-    submitted = [...new Set(orders.map((order) => order.power))];
-    pending = activePowers.filter((power) => !submitted.includes(power));
+    submitted = [...new Set(orders.map((order) => order.power))].filter(
+      (power): power is Power => requiredPowerSet.has(power as Power),
+    );
+    pending = requiredPowers.filter((power) => !submitted.includes(power));
 
     if (currentPlayer?.power) {
       const myOrders = orders.filter(
@@ -184,16 +187,10 @@ export async function getGameStateSnapshot(
       .select()
       .from(gameRetreatTable)
       .where(eq(gameRetreatTable.turnId, turn.id));
-    const retreatPowers = [
-      ...new Set(
-        ((turn.dislodgedUnits as DislodgedUnit[] | null) ?? []).map(
-          (unit) => unit.power,
-        ),
-      ),
-    ].filter((power) => activePowers.includes(power));
-
-    submitted = [...new Set(retreats.map((retreat) => retreat.power))];
-    pending = retreatPowers.filter((power) => !submitted.includes(power));
+    submitted = [...new Set(retreats.map((retreat) => retreat.power))].filter(
+      (power): power is Power => requiredPowerSet.has(power as Power),
+    );
+    pending = requiredPowers.filter((power) => !submitted.includes(power));
 
     if (currentPlayer?.power) {
       const myRetreats = retreats.filter(
@@ -207,21 +204,15 @@ export async function getGameStateSnapshot(
       }
     }
   } else if (turn.phase === 'build_submission') {
-    const positions = turn.unitPositions as UnitPositions;
-    const supplyCenters = turn.supplyCenters as SupplyCenterOwnership;
-    const buildCounts = calculateBuildCounts(positions, supplyCenters);
-    const buildPowers = buildCounts
-      .filter(
-        (count) => count.count !== 0 && activePowers.includes(count.power),
-      )
-      .map((count) => count.power);
     const builds = await database
       .select()
       .from(gameBuildTable)
       .where(eq(gameBuildTable.turnId, turn.id));
 
-    submitted = [...new Set(builds.map((build) => build.power))];
-    pending = buildPowers.filter((power) => !submitted.includes(power));
+    submitted = [...new Set(builds.map((build) => build.power))].filter(
+      (power): power is Power => requiredPowerSet.has(power as Power),
+    );
+    pending = requiredPowers.filter((power) => !submitted.includes(power));
 
     if (currentPlayer?.power) {
       const myBuilds = builds.filter(
