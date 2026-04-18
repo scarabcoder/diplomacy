@@ -426,13 +426,12 @@ export function RoomMessagesPanel({
   }, [isOpen, openOrCreateMutation, roomId, shortcutRequest]);
 
   useEffect(() => {
-    if (
-      !isOpen ||
-      !selectedThreadId ||
-      !activeThread ||
-      activeThread.unreadCount === 0 ||
-      markReadMutation.isPending
-    ) {
+    if (!isOpen || !selectedThreadId || markReadMutation.isPending) {
+      return;
+    }
+
+    const selected = threads.find((thread) => thread.id === selectedThreadId);
+    if (!selected || selected.unreadCount === 0) {
       return;
     }
 
@@ -440,7 +439,7 @@ export function RoomMessagesPanel({
       roomId,
       threadId: selectedThreadId,
     });
-  }, [activeThread, isOpen, markReadMutation, roomId, selectedThreadId]);
+  }, [isOpen, markReadMutation, roomId, selectedThreadId, threads]);
 
   useEffect(() => {
     if (isOpen) {
